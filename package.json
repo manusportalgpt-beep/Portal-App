@@ -1,6 +1,6 @@
 {
   "name": "windows12-launcher",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Безопасный локальный лаунчер Windows 12 в стиле Liquid Glass",
   "main": "src/main.js",
   "author": "Windows 12 Launcher",
@@ -18,8 +18,9 @@
     "appId": "com.windows12.launcher",
     "productName": "Windows 12 Launcher",
     "asar": true,
-    "files": ["src/**/*", "package.json"],
+    "files": ["src/**/*", "assets/**/*", "package.json"],
     "directories": {"output": "release"},
+    "icon": "assets/prism-icon.ico",
     "win": {"target": [{"target": "portable", "arch": ["x64"]}], "artifactName": "Windows12-Launcher-${version}-x64.${ext}", "signAndEditExecutable": false}
   }
 }

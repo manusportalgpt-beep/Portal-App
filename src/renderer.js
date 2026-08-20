@@ -1,182 +1,85 @@
 const $ = selector => document.querySelector(selector);
-const i18n = {
-  ru: {
-    scanning: 'Обновляем локальные ярлыки…', found: count => `Найдено приложений: ${count}`, empty: 'Приложения не найдены. Обновите каталог или добавьте ярлыки в Windows Start Menu.',
-    refreshed: 'Каталог приложений обновлён', opening: name => `Открываем: ${name}`, unavailable: 'Этот ярлык больше недоступен. Обновите каталог.',
-    wallpaper: 'Новые обои установлены', reset: 'Стандартный фон восстановлен', focusOn: 'Режим фокуса включён', focusOff: 'Режим фокуса выключен'
-  },
-  en: {
-    scanning: 'Refreshing local shortcuts…', found: count => `Applications found: ${count}`, empty: 'No applications found. Refresh the catalog or add shortcuts to the Windows Start Menu.',
-    refreshed: 'Application catalog refreshed', opening: name => `Opening: ${name}`, unavailable: 'This shortcut is no longer available. Refresh the catalog.',
-    wallpaper: 'New wallpaper applied', reset: 'Default wallpaper restored', focusOn: 'Focus mode enabled', focusOff: 'Focus mode disabled'
-  }
-};
-let settings = { theme:'violet', language:'ru', reduceMotion:false, showIcons:true, showWidgets:false, iconSize:'comfortable', autoHide:false, centerApps:true, dockStyle:'floating', wallpaperPath:'', wallpaperDim:42, focusMode:false, pinnedIds:[] };
-let catalog = { desktop: [], apps: [], system: [] };
+const defaults = { theme:'violet', language:'ru', reduceMotion:false, showIcons:true, showWidgets:false, iconSize:'comfortable', autoHide:false, centerApps:true, dockStyle:'floating', wallpaperPath:'', wallpaperDim:42, focusMode:false, cinemaMode:false, pinnedIds:[], recentIds:[] };
+let settings = { ...defaults };
+let catalog = { desktop:[], apps:[], system:[] };
 let allItems = [];
 let draggedId = null;
+let activeContextId = null;
+let windowState = new Map();
+let zCounter = 160;
+let notices = [];
+let notes = [];
+let selectedNoteId = null;
+let commandFilter = 'all';
+let commandIndex = 0;
 
-function tr(key, ...args) { const value = (i18n[settings.language] || i18n.ru)[key]; return typeof value === 'function' ? value(...args) : value; }
-function escapeHTML(value) { return String(value).replace(/[&<>'"]/g, char => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', "'":'&#039;', '"':'&quot;' })[char]); }
+function escapeHTML(value) { return String(value ?? '').replace(/[&<>'"]/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#039;','"':'&quot;'})[char]); }
 function getItem(id) { return allItems.find(item => item.id === id); }
-function fileUrl(pathValue) { return `file:///${encodeURI(pathValue.replace(/\\/g, '/')).replace(/#/g, '%23')}`; }
-function safeWallpaper(pathValue) { return `url("${fileUrl(pathValue)}")`; }
-function visualIcon(item, className) {
-  const fallback = escapeHTML(item.icon || '◩');
-  const icon = item.iconData ? `<img src="${item.iconData}" alt="" />` : fallback;
-  return `<span class="${className} ${item.tone || 'silver'}">${icon}</span>`;
-}
-function toast(message) { const node = $('#toast'); node.textContent = message; node.classList.add('show'); clearTimeout(window.toastTimer); window.toastTimer = setTimeout(() => node.classList.remove('show'), 2600); }
-function openOverlay(node) { node.classList.remove('hidden'); node.animate([{opacity:0,filter:'blur(3px)'},{opacity:1,filter:'blur(0)'}],{duration:210,easing:'cubic-bezier(.2,.8,.2,1)'}); }
-function closeOverlay(node) { node.classList.add('hidden'); }
-
-function updateThemeLabel() {
-  const labels = { violet:'Полярный фиолетовый', ocean:'Северный океан', red:'Красная ночь' };
-  $('#theme-label').textContent = labels[settings.theme] || labels.violet;
-}
+function fileUrl(pathValue) { return `file:///${encodeURI(pathValue.replace(/\\/g,'/')).replace(/#/g,'%23')}`; }
+function wallpaperUrl(pathValue) { return `url("${fileUrl(pathValue)}")`; }
+function visualIcon(item, className) { const content = item.iconData ? `<img src="${item.iconData}" alt="" />` : escapeHTML(item.icon || '◩'); return `<span class="${className} ${item.tone || 'silver'}">${content}</span>`; }
+function byteSize(value) { if (!value) return '—'; const units=['Б','КБ','МБ','ГБ']; let i=0; let n=value; while(n>=1024&&i<units.length-1){n/=1024;i++;} return `${n>=10||i===0?Math.round(n):n.toFixed(1)} ${units[i]}`; }
+function relativeDate(ms) { if (!ms) return 'Локальный элемент'; const diff = Math.max(0, Date.now()-ms); const days = Math.floor(diff/86400000); return days ? `${days} дн. назад` : 'Сегодня'; }
+function toast(message) { const node=$('#toast'); node.textContent=message; node.classList.add('show'); clearTimeout(window.toastTimer); window.toastTimer=setTimeout(()=>node.classList.remove('show'),2600); }
+function addNotice(title, text, icon='✦') { notices.unshift({id:`notice-${Date.now()}-${Math.random()}`,title,text,icon,time:Date.now()}); notices=notices.slice(0,20); renderNotices(); }
+function renderNotices() { $('#notification-count').textContent=notices.length; $('#notification-count').classList.toggle('hidden', notices.length===0); $('#notification-list').innerHTML=notices.length ? notices.map(item=>`<article class="notification"><span class="notice-icon">${escapeHTML(item.icon)}</span><div><b>${escapeHTML(item.title)}</b><small>${escapeHTML(item.text)}</small></div></article>`).join('') : '<div class="notification-empty">Здесь будет история важных действий.<br>Сейчас всё спокойно.</div>'; }
+function showSurface(node) { ['#command-palette','#start-canvas','#control-island','#notification-stack','#studio'].forEach(selector=>{const surface=$(selector);if(surface!==node)surface.classList.add('hidden');}); node.classList.remove('hidden'); node.animate([{opacity:0,filter:'blur(4px)',transform:'translateY(8px)'},{opacity:1,filter:'blur(0)',transform:'translateY(0)'}],{duration:220,easing:'cubic-bezier(.2,.86,.2,1)'}); }
+function closeSurfaces() { ['#command-palette','#start-canvas','#control-island','#notification-stack','#studio'].forEach(selector=>$(selector).classList.add('hidden')); hideContext(); }
+function hideContext(){ $('#icon-context').classList.add('hidden'); activeContextId=null; }
+function themeName() { return {violet:'Полярный фиолетовый',aurora:'Prism Aurora',ocean:'Северный океан',red:'Красная ночь'}[settings.theme] || 'Полярный фиолетовый'; }
 function applySettings() {
-  document.body.classList.toggle('theme-ocean', settings.theme === 'ocean');
-  document.body.classList.toggle('theme-red', settings.theme === 'red');
-  document.body.classList.toggle('icons-hidden', settings.showIcons === false);
-  document.body.classList.toggle('focus-active', settings.focusMode === true);
-  document.body.classList.toggle('icon-compact', settings.iconSize === 'compact');
-  document.body.classList.toggle('icon-large', settings.iconSize === 'large');
-  document.body.classList.toggle('reduce-motion', settings.reduceMotion === true);
-  document.body.classList.toggle('atmosphere-muted', settings.showWidgets === false);
-  const wallpaper = $('#wallpaper-layer');
-  wallpaper.classList.toggle('has-custom', Boolean(settings.wallpaperPath));
-  if (settings.wallpaperPath) wallpaper.style.setProperty('--wallpaper-image', safeWallpaper(settings.wallpaperPath));
-  else wallpaper.style.removeProperty('--wallpaper-image');
-  wallpaper.style.setProperty('--wallpaper-dim', (Math.max(10, Math.min(80, settings.wallpaperDim || 42)) / 100).toFixed(2));
-  $('#taskbar').classList.toggle('wide', settings.dockStyle === 'wide');
-  $('#taskbar').classList.toggle('autohide', settings.autoHide === true);
-  $('#taskbar').parentElement.classList.toggle('left', settings.centerApps === false);
-  $('#focus-label').classList.toggle('hidden', settings.focusMode !== true);
-  $('#icons-toggle').checked = settings.showIcons !== false;
-  $('#focus-toggle').checked = settings.focusMode === true;
-  $('#autohide-toggle').checked = settings.autoHide === true;
-  $('#center-toggle').checked = settings.centerApps !== false;
-  $('#icon-size').value = settings.iconSize || 'comfortable';
-  $('#dock-style').value = settings.dockStyle || 'floating';
-  $('#wallpaper-dim').value = settings.wallpaperDim || 42;
-  $('#dim-value').textContent = `${settings.wallpaperDim || 42}%`;
-  document.querySelectorAll('[data-theme]').forEach(button => button.classList.toggle('active', button.dataset.theme === settings.theme));
-  document.querySelectorAll('[data-language]').forEach(button => button.classList.toggle('active', button.dataset.language === settings.language));
-  $('#quick-focus').classList.toggle('active', settings.focusMode === true);
-  $('#quick-icons').classList.toggle('active', settings.showIcons !== false);
-  $('#quick-widgets').classList.toggle('active', settings.showWidgets === true);
-  updateThemeLabel();
+  document.body.classList.toggle('theme-ocean',settings.theme==='ocean');document.body.classList.toggle('theme-red',settings.theme==='red');document.body.classList.toggle('theme-aurora',settings.theme==='aurora');
+  document.body.classList.toggle('icons-hidden',settings.showIcons===false);document.body.classList.toggle('focus-active',settings.focusMode===true);document.body.classList.toggle('cinema-active',settings.cinemaMode===true);document.body.classList.toggle('icon-compact',settings.iconSize==='compact');document.body.classList.toggle('icon-large',settings.iconSize==='large');document.body.classList.toggle('reduce-motion',settings.reduceMotion===true);document.body.classList.toggle('atmosphere-muted',settings.showWidgets===false);
+  const wall=$('#prism-wallpaper');wall.classList.toggle('has-custom',Boolean(settings.wallpaperPath));if(settings.wallpaperPath)wall.style.setProperty('--wallpaper-image',wallpaperUrl(settings.wallpaperPath));else wall.style.removeProperty('--wallpaper-image');wall.style.setProperty('--wallpaper-dim',(Math.max(10,Math.min(80,settings.wallpaperDim||42))/100).toFixed(2));
+  $('#prism-dock').classList.toggle('wide',settings.dockStyle==='wide');$('#prism-dock').classList.toggle('autohide',settings.autoHide===true);$('#dock-anchor').classList.toggle('left',settings.centerApps===false);$('#focus-chip').classList.toggle('hidden',settings.focusMode!==true);
+  $('#theme-label').textContent=themeName();$('#dim-readout').textContent=`${settings.wallpaperDim||42}%`;$('#wallpaper-dim').value=settings.wallpaperDim||42;
+  document.querySelectorAll('[data-theme]').forEach(button=>button.classList.toggle('active',button.dataset.theme===settings.theme));
+  $('#toggle-focus').classList.toggle('active',settings.focusMode===true);$('#toggle-cinema').classList.toggle('active',settings.cinemaMode===true);$('#toggle-icons').classList.toggle('active',settings.showIcons!==false);
+  $('#studio-icons').checked=settings.showIcons!==false;$('#studio-icon-size').value=settings.iconSize||'comfortable';$('#studio-language').value=settings.language||'ru';$('#studio-focus').checked=settings.focusMode===true;$('#studio-autohide').checked=settings.autoHide===true;$('#studio-dock-style').value=settings.dockStyle||'floating';$('#studio-center').checked=settings.centerApps!==false;$('#studio-motion').checked=settings.reduceMotion===true;$('#studio-atmosphere').checked=settings.showWidgets===true;
 }
-async function persist(patch) { settings = await window.windows12.settings.write({ ...settings, ...patch }); applySettings(); return settings; }
+async function persist(patch){settings=await window.windows12.settings.write({...settings,...patch});applySettings();return settings;}
+function desktopMarkup(item){const name=escapeHTML(item.name);return `<button class="prism-icon" data-launch="${item.id}" title="Открыть: ${name}">${visualIcon(item,'icon-box')}<label>${name}</label></button>`;}
+function renderDesktop(){const entries=catalog.desktop||[];$('#desktop-icons').innerHTML=entries.map(desktopMarkup).join('');$('#desktop-empty').classList.toggle('hidden',entries.some(item=>item.kind==='app'));$('#desktop-icons').querySelectorAll('[data-launch]').forEach(button=>{button.addEventListener('dblclick',()=>launch(button.dataset.launch));button.addEventListener('click',()=>{document.querySelectorAll('.prism-icon.selected').forEach(el=>el.classList.remove('selected'));button.classList.add('selected');});button.addEventListener('contextmenu',event=>{event.preventDefault();showContext(event,button.dataset.launch);});});}
+function availableApps(query=''){const needle=query.trim().toLocaleLowerCase();const all=[...(catalog.apps||[]),...(catalog.system||[])];const unique=[...new Map(all.map(item=>[item.id,item])).values()];return needle?unique.filter(item=>item.name.toLocaleLowerCase().includes(needle)).slice(0,45):unique.slice(0,40);}
+function defaultPins(){return [getItem('folder:home'),getItem('folder:documents'),getItem('folder:downloads'),getItem('folder:pictures'),...allItems.filter(item=>item.kind==='app').slice(0,4)].filter(Boolean).map(item=>item.id);}
+function pinnedIds(){const allowed=new Set(allItems.map(item=>item.id));const stored=(settings.pinnedIds||[]).filter(id=>allowed.has(id));return stored.length?stored:defaultPins();}
+function renderDock(){const ids=pinnedIds();if(!(settings.pinnedIds||[]).length&&ids.length){settings.pinnedIds=ids;window.windows12.settings.write(settings);}$('#dock-pins').innerHTML=ids.map(id=>{const item=getItem(id);return `<button class="dock-app active" draggable="true" data-pin="${item.id}" title="${escapeHTML(item.name)}">${visualIcon(item,'dock-symbol')}</button>`;}).join('');$('#dock-pins').querySelectorAll('.dock-app').forEach(button=>{button.addEventListener('click',()=>launch(button.dataset.pin));button.addEventListener('contextmenu',event=>{event.preventDefault();showContext(event,button.dataset.pin);});button.addEventListener('dragstart',event=>{draggedId=button.dataset.pin;button.classList.add('dragging');event.dataTransfer.effectAllowed='move';});button.addEventListener('dragend',()=>{draggedId=null;document.querySelectorAll('.drop-target').forEach(el=>el.classList.remove('drop-target'));button.classList.remove('dragging');});button.addEventListener('dragover',event=>{event.preventDefault();if(draggedId&&draggedId!==button.dataset.pin)button.classList.add('drop-target');});button.addEventListener('dragleave',()=>button.classList.remove('drop-target'));button.addEventListener('drop',async event=>{event.preventDefault();const target=button.dataset.pin;if(!draggedId||draggedId===target)return;const order=[...ids];order.splice(order.indexOf(draggedId),1);order.splice(order.indexOf(target),0,draggedId);await persist({pinnedIds:order});renderDock();});});renderWindowDock();}
+function renderStart(){const pinned=pinnedIds().slice(0,10).map(getItem).filter(Boolean);$('#start-pinned').innerHTML=pinned.map(item=>`<button class="start-tile" data-launch="${item.id}">${visualIcon(item,'app-symbol')}<b>${escapeHTML(item.name)}</b></button>`).join('');$('#start-pinned').querySelectorAll('[data-launch]').forEach(button=>button.addEventListener('click',()=>launch(button.dataset.launch)));const recents=(settings.recentIds||[]).map(getItem).filter(Boolean);$('#recent-list').innerHTML=recents.length?recents.map(item=>`<button class="recent-row" data-launch="${item.id}"><i class="recent-dot"></i><span><b>${escapeHTML(item.name)}</b><small>${item.kind==='folder'?'Локальная папка':'Приложение'}</small></span></button>`).join(''):'<div class="notification-empty">Здесь появятся недавно открытые приложения.</div>';$('#recent-list').querySelectorAll('[data-launch]').forEach(button=>button.addEventListener('click',()=>launch(button.dataset.launch)));}
+async function launch(id){const item=getItem(id);if(!item){toast('Этот элемент больше недоступен.');return;}const result=await window.windows12.catalog.launch(id);if(result?.ok){toast(`Открываем: ${item.name}`);addNotice('Открыто',item.name,item.icon||'◩');settings=await window.windows12.settings.read();renderStart();}else{toast(result?.message||'Не удалось открыть элемент.');addNotice('Не удалось открыть',item.name,'!');}}
+async function refreshCatalog(showNotice=true){try{catalog=await window.windows12.catalog.read();const map=new Map();[...(catalog.system||[]),...(catalog.desktop||[]),...(catalog.apps||[])].forEach(item=>map.set(item.id,item));allItems=[...map.values()].sort((a,b)=>a.name.localeCompare(b.name,settings.language==='en'?'en':'ru'));renderDesktop();renderDock();renderStart();renderCommand();if(showNotice){toast('Каталог приложений обновлён');addNotice('Каталог обновлён',`Доступно приложений: ${allItems.filter(item=>item.kind==='app').length}`,'↻');}}catch{toast('Не удалось прочитать локальные ярлыки Windows.');addNotice('Каталог недоступен','Проверьте доступ к локальным папкам.','!');}}
+function actionItems(){return[{id:'action:files',name:'Открыть Файлы',subtitle:'Разрешённые локальные папки',icon:'▧',action:()=>openLocalWindow('files')},{id:'action:gallery',name:'Открыть Галерею',subtitle:'Изображения на этом компьютере',icon:'◫',action:()=>openLocalWindow('gallery')},{id:'action:notes',name:'Открыть Заметки',subtitle:'Локальные заметки Prism',icon:'✎',action:()=>openLocalWindow('notes')},{id:'action:system',name:'Открыть Систему',subtitle:'Локальные показатели устройства',icon:'◌',action:()=>openLocalWindow('system')},{id:'action:focus',name:settings.focusMode?'Выключить режим фокуса':'Включить режим фокуса',subtitle:'Скрыть отвлекающие элементы',icon:'◌',action:toggleFocus},{id:'action:wallpaper',name:'Изменить обои',subtitle:'Выбрать изображение с компьютера',icon:'◩',action:chooseWallpaper},{id:'action:studio',name:'Открыть Prism Studio',subtitle:'Настройки внешнего вида и взаимодействия',icon:'✦',action:openStudio}];}
+function commandCandidates(query=''){const needle=query.trim().toLocaleLowerCase();const apps=availableApps(query).map(item=>({type:'app',id:item.id,name:item.name,subtitle:item.kind==='folder'?'Локальная папка':'Приложение',item}));const actions=actionItems().filter(item=>!needle||`${item.name} ${item.subtitle}`.toLocaleLowerCase().includes(needle)).map(item=>({...item,type:'action'}));let combined=[];if(commandFilter==='apps')combined=apps;else if(commandFilter==='actions')combined=actions;else combined=[...apps,...actions];return combined.slice(0,34);}
+function renderCommand(){const query=$('#command-input').value||'';const candidates=commandCandidates(query);commandIndex=Math.min(commandIndex,Math.max(0,candidates.length-1));$('#command-results').innerHTML=candidates.length?candidates.map((entry,index)=>{const sym=entry.type==='app'?visualIcon(entry.item,'app-symbol'):`<span class="app-symbol violet">${escapeHTML(entry.icon)}</span>`;return `<button class="command-result ${index===commandIndex?'active':''}" data-command-index="${index}">${sym}<span><b>${escapeHTML(entry.name)}</b><small>${escapeHTML(entry.subtitle)}</small></span><i>${entry.type==='app'?'↵':'›'}</i></button>`;}).join(''):'<div class="notification-empty">Ничего не найдено. Попробуйте другой запрос.</div>';$('#command-results').querySelectorAll('[data-command-index]').forEach(button=>button.addEventListener('click',()=>executeCommand(Number(button.dataset.commandIndex))));}
+function executeCommand(index=commandIndex){const entry=commandCandidates($('#command-input').value||'')[index];if(!entry)return;if(entry.type==='app')launch(entry.id);else entry.action();closeSurfaces();}
+function openCommand(){showSurface($('#command-palette'));$('#command-input').value='';commandIndex=0;renderCommand();setTimeout(()=>$('#command-input').focus(),0);}
+function openStart(){showSurface($('#start-canvas'));renderStart();}
+function openControl(){showSurface($('#control-island'));}
+function openStudio(){showSurface($('#studio'));}
+async function chooseWallpaper(){const value=await window.windows12.wallpaper.choose();if(value){await persist({wallpaperPath:value});toast('Новые обои применены');addNotice('Обои обновлены','Новый фон применён локально.','◩');}}
+async function toggleFocus(){await persist({focusMode:!settings.focusMode});toast(settings.focusMode?'Режим фокуса включён':'Режим фокуса выключен');addNotice('Режим фокуса',settings.focusMode?'Отвлекающие элементы скрыты.':'Рабочий стол снова доступен.','◌');}
+async function toggleCinema(){await persist({cinemaMode:!settings.cinemaMode});toast(settings.cinemaMode?'Режим кино включён. Подведите курсор вниз, чтобы увидеть dock.':'Режим кино выключен.');}
+function showContext(event,id){activeContextId=id;const menu=$('#icon-context');menu.style.left=`${Math.min(event.clientX,window.innerWidth-185)}px`;menu.style.top=`${Math.min(event.clientY,window.innerHeight-150)}px`;menu.classList.remove('hidden');}
+async function contextAction(action){const item=getItem(activeContextId);if(!item)return;if(action==='open')launch(item.id);if(action==='pin'){const order=pinnedIds();if(!order.includes(item.id)){await persist({pinnedIds:[...order,item.id].slice(0,16)});renderDock();toast(`${item.name}: закреплено в dock`);}}if(action==='reveal'){const result=await window.windows12.catalog.reveal(item.id);toast(result?.ok?'Расположение открыто в Проводнике.':result?.message||'Не удалось показать расположение.');}hideContext();}
+function registerWindow(kind,node){windowState.set(kind,{node,minimized:false});focusWindow(kind);renderWindowDock();}
+function focusWindow(kind){const state=windowState.get(kind);if(!state)return;state.minimized=false;state.node.classList.remove('minimized');state.node.style.zIndex=++zCounter;document.querySelectorAll('.prism-window.focused').forEach(node=>node.classList.remove('focused'));state.node.classList.add('focused');renderWindowDock();}
+function closeWindow(kind){const state=windowState.get(kind);if(!state)return;state.node.animate([{opacity:1,transform:'scale(1)'},{opacity:0,transform:'scale(.96)'}],{duration:150,easing:'ease-in'}).finished.catch(()=>{}).finally(()=>state.node.remove());windowState.delete(kind);renderWindowDock();}
+function minimizeWindow(kind){const state=windowState.get(kind);if(!state)return;state.minimized=true;state.node.classList.add('minimized');renderWindowDock();}
+function renderWindowDock(){const icons={files:'▧',gallery:'◫',notes:'✎',system:'◌'};$('#dock-windows').innerHTML=[...windowState.entries()].map(([kind,state])=>`<button class="dock-window ${state.node.classList.contains('focused')&&!state.minimized?'active':''}" data-window-focus="${kind}" title="${{files:'Файлы',gallery:'Галерея',notes:'Заметки',system:'Система'}[kind]}">${icons[kind]}</button>`).join('');$('#dock-windows').querySelectorAll('[data-window-focus]').forEach(button=>button.addEventListener('click',()=>focusWindow(button.dataset.windowFocus)));}
+function windowFrame(kind,title,icon,content,left,top,width,height){return `<article class="prism-window focused" data-window="${kind}" style="left:${left}px;top:${top}px;width:${width}px;height:${height}px"><header class="window-header"><div class="window-heading"><span class="window-icon">${icon}</span><span><b>${title}</b><small>Локальное представление Prism</small></span></div><div class="window-actions"><button data-window-minimize title="Свернуть">—</button><button data-window-close class="window-close" title="Закрыть">×</button></div></header><div class="window-body">${content}</div><i class="window-resizer"></i></article>`;}
+function makeWindowInteractive(kind,node){node.addEventListener('mousedown',()=>focusWindow(kind));node.querySelector('[data-window-close]').addEventListener('click',()=>closeWindow(kind));node.querySelector('[data-window-minimize]').addEventListener('click',()=>minimizeWindow(kind));const header=node.querySelector('.window-header');header.addEventListener('pointerdown',event=>{if(event.target.closest('button'))return;focusWindow(kind);const rect=node.getBoundingClientRect();const startX=event.clientX,startY=event.clientY,startL=rect.left,startT=rect.top;header.setPointerCapture(event.pointerId);const move=e=>{node.style.left=`${Math.max(0,Math.min(window.innerWidth-220,startL+e.clientX-startX))}px`;node.style.top=`${Math.max(0,Math.min(window.innerHeight-120,startT+e.clientY-startY))}px`;};const up=()=>{header.removeEventListener('pointermove',move);header.removeEventListener('pointerup',up);};header.addEventListener('pointermove',move);header.addEventListener('pointerup',up);});const resizer=node.querySelector('.window-resizer');resizer.addEventListener('pointerdown',event=>{focusWindow(kind);const rect=node.getBoundingClientRect();const sx=event.clientX,sy=event.clientY,sw=rect.width,sh=rect.height;resizer.setPointerCapture(event.pointerId);const move=e=>{node.style.width=`${Math.max(370,Math.min(window.innerWidth-20,sw+e.clientX-sx))}px`;node.style.height=`${Math.max(270,Math.min(window.innerHeight-95,sh+e.clientY-sy))}px`;};const up=()=>{resizer.removeEventListener('pointermove',move);resizer.removeEventListener('pointerup',up);};resizer.addEventListener('pointermove',move);resizer.addEventListener('pointerup',up);});}
+async function openLocalWindow(kind){closeSurfaces();if(windowState.has(kind)){focusWindow(kind);return;}const layer=$('#window-layer');const positions={files:[180,95,660,465],gallery:[360,115,570,420],notes:[250,135,570,390],system:[430,135,420,375]};const [left,top,width,height]=positions[kind];let content='';if(kind==='files')content=`<div class="files-layout"><aside class="files-side"><button class="active" data-folder="folder:desktop"><span>▧</span>Рабочий стол</button><button data-folder="folder:documents"><span>▤</span>Документы</button><button data-folder="folder:downloads"><span>↓</span>Загрузки</button><button data-folder="folder:pictures"><span>◫</span>Изображения</button></aside><section class="files-main"><div class="file-topline"><b id="files-folder-name">Рабочий стол</b><small id="files-count">Загрузка…</small></div><div id="files-grid" class="file-grid"></div></section></div>`;if(kind==='gallery')content=`<div class="gallery-wrap"><div class="gallery-hero"><div><h3>Галерея</h3><p>Локальные изображения из папки «Изображения»</p></div><button id="gallery-refresh" class="prism-quiet">Обновить</button></div><div id="gallery-grid" class="gallery-grid"></div></div>`;if(kind==='notes')content=`<div class="notes-wrap"><aside class="note-list"><button id="new-note" class="new-note">＋ Новая заметка</button><div id="note-list-items" class="note-list-items"></div></aside><section class="note-editor"><textarea id="note-text" placeholder="Начните писать…"></textarea><footer><span id="note-state">Локальная заметка</span><button id="delete-note">Удалить</button></footer></section></div>`;if(kind==='system')content=`<div class="system-wrap"><div class="system-orb">✦</div><div class="system-title"><h3 id="system-host">Локальная система</h3><p>Windows 12 Prism работает только с данными этого устройства.</p></div><div id="system-cards" class="system-cards"></div></div>`;const titles={files:'Файлы',gallery:'Галерея',notes:'Заметки',system:'О системе'};const icons={files:'▧',gallery:'◫',notes:'✎',system:'◌'};layer.insertAdjacentHTML('beforeend',windowFrame(kind,titles[kind],icons[kind],content,left,top,width,height));const node=layer.lastElementChild;registerWindow(kind,node);makeWindowInteractive(kind,node);if(kind==='files')await loadFiles(node,'folder:desktop');if(kind==='gallery')await loadGallery(node);if(kind==='notes')await loadNotes(node);if(kind==='system')await loadSystem(node);addNotice('Открыто окно',titles[kind],icons[kind]);}
+async function loadFiles(node,folderId){const result=await window.windows12.files.list(folderId);if(!result?.ok){node.querySelector('#files-grid').innerHTML='<div class="gallery-empty">Папка недоступна.</div>';return;}node.querySelector('#files-folder-name').textContent=result.folder.name;node.querySelector('#files-count').textContent=`${result.items.length} элементов`;node.querySelectorAll('[data-folder]').forEach(button=>{button.classList.toggle('active',button.dataset.folder===folderId);button.onclick=()=>loadFiles(node,button.dataset.folder);});node.querySelector('#files-grid').innerHTML=result.items.map(item=>`<button class="file-card ${item.isDirectory?'folder-card':''}" data-file-id="${item.id}">${item.preview?`<span class="file-symbol"><img src="${item.preview}" alt=""></span>`:item.isDirectory?'<span class="file-symbol">▧</span>':`<span class="file-symbol">${item.iconData?`<img src="${item.iconData}" alt="">`:'◩'}</span>`}<b>${escapeHTML(item.name)}</b><small>${item.isDirectory?'Папка':item.type} · ${item.isDirectory?'':byteSize(item.size)}</small></button>`).join('')||'<div class="gallery-empty">Папка пока пуста.</div>';node.querySelectorAll('[data-file-id]').forEach(button=>button.addEventListener('dblclick',async()=>{const result=await window.windows12.files.open(button.dataset.fileId);toast(result?.ok?'Открываем в Windows…':result?.message||'Не удалось открыть файл.');}));}
+async function loadGallery(node){const result=await window.windows12.files.gallery();const entries=result?.items||[];node.querySelector('#gallery-grid').innerHTML=entries.length?entries.map(item=>`<button class="gallery-item" data-gallery-id="${item.id}">${item.preview?`<img src="${item.preview}" alt="${escapeHTML(item.name)}">`:'<span>◫</span>'}<span>${escapeHTML(item.name)}</span></button>`).join(''):'<div class="gallery-empty">В папке «Изображения» пока нет доступных изображений.</div>';node.querySelectorAll('[data-gallery-id]').forEach(button=>button.addEventListener('dblclick',async()=>{const result=await window.windows12.files.open(button.dataset.galleryId);toast(result?.ok?'Открываем оригинал…':result?.message||'Не удалось открыть изображение.');}));const refresh=node.querySelector('#gallery-refresh');if(refresh)refresh.onclick=()=>loadGallery(node);const thumbs=entries.slice(0,3);$('#gallery-glance-grid').innerHTML=thumbs.length?thumbs.map(item=>`<i style="background-image:url('${item.preview||''}')"></i>`).join(''):'<i></i><i></i><i></i>';}
+async function loadNotes(node){notes=await window.windows12.notes.read();if(!notes.length){notes=[{id:`note-${Date.now()}`,text:'Добро пожаловать в Prism Notes.\n\nЭта заметка хранится только на вашем компьютере.',updatedAt:Date.now()}];notes=await window.windows12.notes.write(notes);}selectedNoteId=selectedNoteId&&notes.some(note=>note.id===selectedNoteId)?selectedNoteId:notes[0].id;renderNotes(node);}
+function renderNotes(node){const current=notes.find(note=>note.id===selectedNoteId)||notes[0];node.querySelector('#note-list-items').innerHTML=notes.map(note=>`<button class="note-select ${note.id===current.id?'active':''}" data-note-id="${note.id}"><b>${escapeHTML(note.text.split('\n')[0]||'Без названия')}</b><small>${relativeDate(note.updatedAt)}</small></button>`).join('');const area=node.querySelector('#note-text');area.value=current.text;node.querySelector('#note-state').textContent=`Сохранено локально · ${relativeDate(current.updatedAt)}`;node.querySelectorAll('[data-note-id]').forEach(button=>button.onclick=()=>{selectedNoteId=button.dataset.noteId;renderNotes(node);});node.querySelector('#new-note').onclick=async()=>{const note={id:`note-${Date.now()}-${Math.random()}`,text:'',updatedAt:Date.now()};notes=[note,...notes];notes=await window.windows12.notes.write(notes);selectedNoteId=note.id;renderNotes(node);area.focus();};let saveTimer;area.oninput=()=>{const note=notes.find(item=>item.id===selectedNoteId);if(!note)return;note.text=area.value;note.updatedAt=Date.now();node.querySelector('#note-state').textContent='Сохраняем локально…';clearTimeout(saveTimer);saveTimer=setTimeout(async()=>{notes=await window.windows12.notes.write(notes);renderNotes(node);},450);};node.querySelector('#delete-note').onclick=async()=>{if(notes.length===1){notes[0].text='';notes[0].updatedAt=Date.now();}else{notes=notes.filter(note=>note.id!==selectedNoteId);selectedNoteId=notes[0].id;}notes=await window.windows12.notes.write(notes);renderNotes(node);};}
+async function loadSystem(node){const stats=await window.windows12.system.stats();node.querySelector('#system-host').textContent=stats.hostname;node.querySelector('#system-cards').innerHTML=`<div><span>Память</span><b>${stats.memory}% из ${stats.memoryTotalGb} ГБ</b></div><div><span>Процессор</span><b>${stats.cpus} ядер</b></div><div><span>Архитектура</span><b>${escapeHTML(stats.arch)}</b></div><div><span>Время работы</span><b>${stats.uptimeHours} ч</b></div>`;}
+async function updateSystemGlance(){try{const stats=await window.windows12.system.stats();$('#glance-memory').textContent=`${stats.memory}% памяти`;$('#glance-host').textContent=stats.hostname;$('#glance-meter').style.width=`${Math.max(4,stats.memory)}%`;}catch{}}
+function updateClock(){const now=new Date();const locale=settings.language==='en'?'en-US':'ru-RU';$('#dock-clock').textContent=new Intl.DateTimeFormat(locale,{hour:'2-digit',minute:'2-digit'}).format(now);$('#dock-date').textContent=new Intl.DateTimeFormat(locale,{day:'2-digit',month:'2-digit',year:'numeric'}).format(now);$('#hero-time').textContent=new Intl.DateTimeFormat(locale,{hour:'2-digit',minute:'2-digit'}).format(now);$('#hero-date').textContent=new Intl.DateTimeFormat(locale,{weekday:'long',day:'numeric',month:'long'}).format(now);}
 
-function desktopMarkup(item) {
-  const name = escapeHTML(item.name);
-  return `<button class="desktop-icon" data-launch="${item.id}" title="Открыть: ${name}">${visualIcon(item, 'desktop-icon-symbol')}<span class="desktop-icon-label">${name}</span></button>`;
-}
-function appMarkup(item) {
-  const name = escapeHTML(item.name);
-  return `<button class="app-item" data-launch="${item.id}" title="Открыть: ${name}">${visualIcon(item, 'app-glyph')}<b>${name}</b></button>`;
-}
-function bindLaunch(root) { root.querySelectorAll('[data-launch]').forEach(button => button.addEventListener('click', () => launch(button.dataset.launch))); }
-function renderDesktop() {
-  const visible = catalog.desktop || [];
-  $('#desktop-icons').innerHTML = visible.map(desktopMarkup).join('');
-  bindLaunch($('#desktop-icons'));
-  $('#empty-state').classList.toggle('show', visible.filter(item => item.kind === 'app').length === 0);
-}
-function appsForQuery(query = '') {
-  const needle = query.trim().toLocaleLowerCase();
-  const base = [...(catalog.apps || []), ...(catalog.system || [])];
-  const unique = [...new Map(base.map(item => [item.id, item])).values()];
-  return needle ? unique.filter(item => item.name.toLocaleLowerCase().includes(needle)).slice(0, 40) : unique.slice(0, 30);
-}
-function renderApps(query = '') {
-  const entries = appsForQuery(query);
-  $('#app-grid').innerHTML = entries.map(appMarkup).join('');
-  bindLaunch($('#app-grid'));
-  const count = allItems.filter(item => item.kind === 'app').length;
-  $('#catalog-status').textContent = entries.length ? tr('found', count) : tr('empty');
-}
-function defaultPins() {
-  return [getItem('folder:home'), getItem('folder:documents'), getItem('folder:downloads'), ...allItems.filter(item => item.kind === 'app').slice(0, 4)].filter(Boolean).map(item => item.id);
-}
-function renderDock() {
-  const allowed = new Set(allItems.map(item => item.id));
-  const stored = (settings.pinnedIds || []).filter(id => allowed.has(id));
-  const ids = stored.length ? stored : defaultPins();
-  if (!stored.length && ids.length) { settings.pinnedIds = ids; window.windows12.settings.write(settings); }
-  $('#task-pinned').innerHTML = ids.map(id => {
-    const item = getItem(id); const name = escapeHTML(item.name);
-    return `<button class="dock-app active" draggable="true" data-pin="${item.id}" title="${name}">${visualIcon(item, 'dock-icon')}</button>`;
-  }).join('');
-  $('#task-pinned').querySelectorAll('.dock-app').forEach(button => {
-    button.addEventListener('click', () => launch(button.dataset.pin));
-    button.addEventListener('dragstart', event => { draggedId = button.dataset.pin; button.classList.add('dragging'); event.dataTransfer.effectAllowed = 'move'; });
-    button.addEventListener('dragend', () => { draggedId = null; document.querySelectorAll('.drop-target').forEach(node => node.classList.remove('drop-target')); button.classList.remove('dragging'); });
-    button.addEventListener('dragover', event => { event.preventDefault(); if (draggedId && draggedId !== button.dataset.pin) button.classList.add('drop-target'); });
-    button.addEventListener('dragleave', () => button.classList.remove('drop-target'));
-    button.addEventListener('drop', async event => { event.preventDefault(); const target = button.dataset.pin; if (!draggedId || draggedId === target) return; const order = [...ids]; order.splice(order.indexOf(draggedId), 1); order.splice(order.indexOf(target), 0, draggedId); await persist({ pinnedIds: order }); renderDock(); });
-  });
-}
-async function launch(id) {
-  const item = getItem(id);
-  if (!item) { toast(tr('unavailable')); return; }
-  const result = await window.windows12.catalog.launch(id);
-  toast(result?.ok ? tr('opening', item.name) : (result?.message || tr('unavailable')));
-}
-async function refreshCatalog(showToast = true) {
-  $('#catalog-status').textContent = tr('scanning');
-  try {
-    catalog = await window.windows12.catalog.read();
-    const map = new Map(); [...(catalog.system || []), ...(catalog.desktop || []), ...(catalog.apps || [])].forEach(item => map.set(item.id, item));
-    allItems = [...map.values()].sort((a,b) => a.name.localeCompare(b.name, settings.language === 'en' ? 'en' : 'ru'));
-    renderDesktop(); renderApps($('#app-search').value); renderDock(); if (showToast) toast(tr('refreshed'));
-  } catch { $('#catalog-status').textContent = 'Не удалось получить локальный каталог Windows.'; toast('Не удалось прочитать локальные ярлыки.'); }
-}
-async function updateStats() {
-  try { const stats = await window.windows12.system.stats(); $('#dock-memory').textContent = `${stats.memory}%`; } catch { $('#dock-memory').textContent = '—%'; }
-}
-function updateClock() {
-  const locale = settings.language === 'en' ? 'en-US' : 'ru-RU'; const now = new Date();
-  $('#clock').textContent = new Intl.DateTimeFormat(locale,{hour:'2-digit',minute:'2-digit'}).format(now);
-  $('#tray-date').textContent = new Intl.DateTimeFormat(locale,{day:'2-digit',month:'2-digit',year:'numeric'}).format(now);
-}
-async function chooseWallpaper() { const selection = await window.windows12.wallpaper.choose(); if (selection) { await persist({ wallpaperPath: selection }); toast(tr('wallpaper')); } }
-async function toggleFocus() { await persist({ focusMode: !settings.focusMode }); toast(settings.focusMode ? tr('focusOn') : tr('focusOff')); }
-function openStart() { closeOverlay($('#control-center')); openOverlay($('#start-menu')); setTimeout(() => $('#app-search').focus(), 0); }
-function openControl() { closeOverlay($('#start-menu')); openOverlay($('#control-center')); }
-function openSettings() { closeOverlay($('#control-center')); closeOverlay($('#start-menu')); openOverlay($('#settings-panel')); }
+$('#dock-start').addEventListener('click',()=>$('#start-canvas').classList.contains('hidden')?openStart():closeSurfaces());$('#brand-button').addEventListener('click',openStart);$('#dock-command').addEventListener('click',openCommand);$('#top-command').addEventListener('click',openCommand);$('#start-command').addEventListener('click',openCommand);$('#dock-control').addEventListener('click',()=>$('#control-island').classList.contains('hidden')?openControl():closeSurfaces());$('#dock-notify').addEventListener('click',()=>showSurface($('#notification-stack')));$('#notification-button').addEventListener('click',()=>showSurface($('#notification-stack')));$('#close-start').addEventListener('click',closeSurfaces);$('#close-control').addEventListener('click',closeSurfaces);$('#close-studio').addEventListener('click',closeSurfaces);$('#open-studio').addEventListener('click',openStudio);$('#island-studio').addEventListener('click',openStudio);$('#refresh-catalog').addEventListener('click',()=>refreshCatalog());$('#open-files-recent').addEventListener('click',()=>openLocalWindow('files'));
+$('#minimize').addEventListener('click',()=>window.windows12.window.minimize());$('#maximize').addEventListener('click',()=>window.windows12.window.maximize());$('#close').addEventListener('click',()=>window.windows12.window.close());
+$('#command-input').addEventListener('input',()=>{commandIndex=0;renderCommand();});$('#command-input').addEventListener('keydown',event=>{const list=commandCandidates($('#command-input').value||'');if(event.key==='ArrowDown'){event.preventDefault();commandIndex=Math.min(commandIndex+1,Math.max(0,list.length-1));renderCommand();}if(event.key==='ArrowUp'){event.preventDefault();commandIndex=Math.max(0,commandIndex-1);renderCommand();}if(event.key==='Enter'){event.preventDefault();executeCommand();}});document.querySelectorAll('[data-command-filter]').forEach(button=>button.addEventListener('click',()=>{commandFilter=button.dataset.commandFilter;document.querySelectorAll('[data-command-filter]').forEach(item=>item.classList.toggle('active',item===button));commandIndex=0;renderCommand();}));
+document.querySelectorAll('[data-open-window]').forEach(button=>button.addEventListener('click',()=>openLocalWindow(button.dataset.openWindow)));$('#toggle-focus').addEventListener('click',toggleFocus);$('#toggle-cinema').addEventListener('click',toggleCinema);$('#toggle-icons').addEventListener('click',()=>persist({showIcons:settings.showIcons===false}));$('#select-wallpaper').addEventListener('click',chooseWallpaper);$('#studio-wallpaper').addEventListener('click',chooseWallpaper);$('#reset-wallpaper').addEventListener('click',async()=>{await persist({wallpaperPath:''});toast('Стандартный фон восстановлен');});$('#wallpaper-dim').addEventListener('input',event=>{settings.wallpaperDim=Number(event.target.value);applySettings();});$('#wallpaper-dim').addEventListener('change',event=>persist({wallpaperDim:Number(event.target.value)}));document.querySelectorAll('[data-theme]').forEach(button=>button.addEventListener('click',()=>persist({theme:button.dataset.theme})));$('#studio-icons').addEventListener('change',event=>persist({showIcons:event.target.checked}));$('#studio-icon-size').addEventListener('change',event=>persist({iconSize:event.target.value}));$('#studio-focus').addEventListener('change',event=>persist({focusMode:event.target.checked}));$('#studio-autohide').addEventListener('change',event=>persist({autoHide:event.target.checked}));$('#studio-dock-style').addEventListener('change',event=>persist({dockStyle:event.target.value}));$('#studio-center').addEventListener('change',event=>persist({centerApps:event.target.checked}));$('#studio-motion').addEventListener('change',event=>persist({reduceMotion:event.target.checked}));$('#studio-atmosphere').addEventListener('change',event=>persist({showWidgets:event.target.checked}));$('#studio-language').addEventListener('change',async event=>{await persist({language:event.target.value});updateClock();renderStart();renderCommand();});document.querySelectorAll('[data-studio-tab]').forEach(button=>button.addEventListener('click',()=>{document.querySelectorAll('[data-studio-tab]').forEach(item=>item.classList.toggle('active',item===button));document.querySelectorAll('[data-studio-page]').forEach(page=>page.classList.toggle('active',page.dataset.studioPage===button.dataset.studioTab));}));
+$('#clear-notifications').addEventListener('click',()=>{notices=[];renderNotices();});$('#icon-context').querySelectorAll('[data-context-action]').forEach(button=>button.addEventListener('click',()=>contextAction(button.dataset.contextAction)));document.addEventListener('click',event=>{if(!event.target.closest('#icon-context')&&!event.target.closest('.prism-icon')&&!event.target.closest('.dock-app'))hideContext();});document.addEventListener('keydown',event=>{if(event.key==='Escape'){closeSurfaces();hideContext();}if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='k'){event.preventDefault();openCommand();}if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='n'){event.preventDefault();openLocalWindow('notes');}});
 
-$('#dock-start').addEventListener('click', () => $('#start-menu').classList.contains('hidden') ? openStart() : closeOverlay($('#start-menu')));
-$('#dock-search').addEventListener('click', openStart);
-$('#control-button').addEventListener('click', () => $('#control-center').classList.contains('hidden') ? openControl() : closeOverlay($('#control-center')));
-$('#close-start').addEventListener('click', () => closeOverlay($('#start-menu')));
-$('#close-control').addEventListener('click', () => closeOverlay($('#control-center')));
-$('#close-settings').addEventListener('click', () => closeOverlay($('#settings-panel')));
-$('#open-settings').addEventListener('click', openSettings); $('#open-settings-control').addEventListener('click', openSettings);
-$('#refresh-catalog').addEventListener('click', () => refreshCatalog());
-$('#minimize').addEventListener('click', () => window.windows12.window.minimize()); $('#maximize').addEventListener('click', () => window.windows12.window.maximize()); $('#close').addEventListener('click', () => window.windows12.window.close());
-$('#app-search').addEventListener('input', event => renderApps(event.target.value));
-$('#app-search').addEventListener('keydown', event => { if (event.key === 'Enter') { const first = appsForQuery(event.target.value)[0]; if (first) launch(first.id); } });
-document.querySelectorAll('[data-system]').forEach(button => button.addEventListener('click', () => launch(button.dataset.system)));
-$('#toggle-focus-from-start').addEventListener('click', toggleFocus); $('#quick-focus').addEventListener('click', toggleFocus);
-$('#quick-icons').addEventListener('click', () => persist({ showIcons: settings.showIcons === false }));
-$('#quick-widgets').addEventListener('click', () => persist({ showWidgets: settings.showWidgets === false }));
-$('#quick-wallpaper').addEventListener('click', chooseWallpaper); $('#choose-wallpaper').addEventListener('click', chooseWallpaper);
-$('#reset-wallpaper').addEventListener('click', async () => { await persist({ wallpaperPath: '' }); toast(tr('reset')); });
-$('#wallpaper-dim').addEventListener('input', event => { settings.wallpaperDim = Number(event.target.value); applySettings(); });
-$('#wallpaper-dim').addEventListener('change', event => persist({ wallpaperDim: Number(event.target.value) }));
-document.querySelectorAll('[data-theme]').forEach(button => button.addEventListener('click', () => persist({ theme: button.dataset.theme })));
-$('#icons-toggle').addEventListener('change', event => persist({ showIcons: event.target.checked })); $('#focus-toggle').addEventListener('change', event => persist({ focusMode: event.target.checked }));
-$('#autohide-toggle').addEventListener('change', event => persist({ autoHide: event.target.checked })); $('#center-toggle').addEventListener('change', event => persist({ centerApps: event.target.checked }));
-$('#icon-size').addEventListener('change', event => persist({ iconSize: event.target.value })); $('#dock-style').addEventListener('change', event => persist({ dockStyle: event.target.value }));
-document.querySelectorAll('[data-language]').forEach(button => button.addEventListener('click', async () => { await persist({ language: button.dataset.language }); updateClock(); renderApps($('#app-search').value); }));
-document.querySelectorAll('.settings-tabs button').forEach(button => button.addEventListener('click', () => { document.querySelectorAll('.settings-tabs button').forEach(node => node.classList.toggle('active', node === button)); document.querySelectorAll('.settings-view').forEach(node => node.classList.toggle('active', node.dataset.view === button.dataset.tab)); }));
-document.addEventListener('keydown', event => { if (event.key === 'Escape') { closeOverlay($('#start-menu')); closeOverlay($('#control-center')); closeOverlay($('#settings-panel')); } if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') { event.preventDefault(); openStart(); } });
-
-(async function init() {
-  settings = { ...settings, ...await window.windows12.settings.read() };
-  applySettings(); updateClock(); await refreshCatalog(false); await updateStats();
-  setInterval(updateClock, 30_000); setInterval(updateStats, 8_000);
-  if (!localStorage.getItem('windows12-onboarding-v4')) { $('#onboarding').classList.remove('hidden'); setTimeout(() => { $('#onboarding').classList.add('hidden'); localStorage.setItem('windows12-onboarding-v4', 'done'); }, 2900); }
-})();
+(async function init(){settings={...defaults,...await window.windows12.settings.read()};applySettings();renderNotices();updateClock();await refreshCatalog(false);await updateSystemGlance();try{const gallery=await window.windows12.files.gallery();const thumbs=(gallery.items||[]).slice(0,3);$('#gallery-glance-grid').innerHTML=thumbs.length?thumbs.map(item=>`<i style="background-image:url('${item.preview||''}')"></i>`).join(''):'<i></i><i></i><i></i>';}catch{}addNotice('Windows 12 Prism готов','Локальный каталог и личное пространство подключены.','✦');setInterval(updateClock,30000);setInterval(updateSystemGlance,8000);if(!localStorage.getItem('windows12-prism-first-light')){$('#first-light').classList.remove('hidden');setTimeout(()=>{$('#first-light').classList.add('hidden');localStorage.setItem('windows12-prism-first-light','done');},3600);}})();
