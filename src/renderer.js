@@ -10,7 +10,14 @@ let draggedId = null;
 
 function tr(key, ...args) { const value = (i18n[settings.language] || i18n.ru)[key]; return typeof value === 'function' ? value(...args) : value; }
 function getItem(id) { return allItems.find(item => item.id === id); }
-function safeFileUrl(filePath) { return `url("file:///${encodeURI(filePath.replace(/\\/g, '/')).replace(/#/g, '%23')}")`; }
+function localFileHref(filePath) { return `file:///${encodeURI(filePath.replace(/\\/g, '/')).replace(/#/g, '%23')}`; }
+function safeFileUrl(filePath) { return `url("${localFileHref(filePath)}")`; }
+function escapeHTML(value) { return String(value).replace(/[&<>'"]/g, char => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', "'":'&#039;', '"':'&quot;' })[char]); }
+function visualIcon(item, className) {
+  const fallback = escapeHTML(item.icon || '◩');
+  const native = item.iconPath ? `<img src="${localFileHref(item.iconPath)}" alt="" />` : fallback;
+  return `<span class="${className} ${item.tone || 'silver'}">${native}</span>`;
+}
 function openOverlay(node) { node.classList.remove('hidden'); node.animate([{ opacity:0, transform:'translate(-50%, 15px) scale(.985)' },{ opacity:1, transform:'translate(-50%, 0) scale(1)' }],{ duration:230, easing:'cubic-bezier(.2,.8,.2,1)' }); }
 function closeOverlay(node) { node.classList.add('hidden'); }
 function toast(message) { const node = $('#toast'); node.textContent = message; node.classList.add('show'); clearTimeout(window.__toast); window.__toast = setTimeout(() => node.classList.remove('show'), 2800); }
@@ -44,10 +51,12 @@ function applySettings() {
 async function persist(patch) { settings = await window.windows12.settings.write({ ...settings, ...patch }); applySettings(); return settings; }
 
 function desktopIconMarkup(item) {
-  return `<button class="desktop-icon" data-launch="${item.id}" title="Открыть: ${item.name}"><span class="desktop-icon-symbol ${item.tone || 'silver'}">${item.icon || '◩'}</span><span class="desktop-icon-label">${item.name}</span></button>`;
+  const name = escapeHTML(item.name);
+  return `<button class="desktop-icon" data-launch="${item.id}" title="Открыть: ${name}">${visualIcon(item, 'desktop-icon-symbol')}<span class="desktop-icon-label">${name}</span></button>`;
 }
 function appMarkup(item) {
-  return `<button class="app-item" data-launch="${item.id}" title="Открыть: ${item.name}"><span class="app-icon ${item.tone || 'silver'}">${item.icon || '◩'}</span><b>${item.name}</b></button>`;
+  const name = escapeHTML(item.name);
+  return `<button class="app-item" data-launch="${item.id}" title="Открыть: ${name}">${visualIcon(item, 'app-icon')}<b>${name}</b></button>`;
 }
 function bindLaunchButtons(root = document) { root.querySelectorAll('[data-launch]').forEach(button => { button.addEventListener('click', () => launch(button.dataset.launch)); }); }
 function renderDesktop() {
@@ -84,7 +93,7 @@ function renderPinned() {
   if (!ids.length && finalIds.length) { settings.pinnedIds = finalIds; window.windows12.settings.write(settings); }
   $('#task-pinned').innerHTML = finalIds.map(id => {
     const item = getItem(id);
-    return `<button class="task-app active" draggable="true" data-pin="${item.id}" title="${item.name}"><span class="task-icon ${item.tone || 'silver'}">${item.icon || '◩'}</span></button>`;
+    return `<button class="task-app active" draggable="true" data-pin="${item.id}" title="${escapeHTML(item.name)}">${visualIcon(item, 'task-icon')}</button>`;
   }).join('');
   $('#task-pinned').querySelectorAll('.task-app').forEach(button => {
     button.addEventListener('click', () => launch(button.dataset.pin));

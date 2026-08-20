@@ -52,6 +52,17 @@ function iconFor(name) {
   if (/(photo|paint|фото|image)/.test(value)) return '◫';
   return '◩';
 }
+function nativeIconPath(file) {
+  try {
+    if (/\.lnk$/i.test(file) && process.platform === 'win32') {
+      const details = shell.readShortcutLink(file);
+      if (details && details.icon) return details.icon;
+      if (details && details.target && /\.exe$/i.test(details.target)) return details.target;
+    }
+    if (/\.exe$/i.test(file)) return file;
+  } catch { /* Неудачное чтение значка не должно блокировать каталог */ }
+  return '';
+}
 function toneFor(name) {
   const value = name.toLowerCase();
   if (/(steam|game|roblox|discord|battle)/.test(value)) return 'violet';
@@ -71,7 +82,11 @@ function collectEntries(root, limit = 120, maxDepth = 4) {
       const itemPath = path.join(dir, entry.name);
       if (entry.isDirectory()) { walk(itemPath, depth + 1); continue; }
       if (!/\.(lnk|url|exe)$/i.test(entry.name)) continue;
-      found.push({ id: makeId(itemPath), name: labelFor(itemPath), path: itemPath, icon: iconFor(entry.name), tone: toneFor(entry.name), kind: 'app' });
+      found.push({
+        id: makeId(itemPath), name: labelFor(itemPath), path: itemPath,
+        icon: iconFor(entry.name), iconPath: nativeIconPath(itemPath),
+        tone: toneFor(entry.name), kind: 'app'
+      });
     }
   }
   walk(root, 0);
@@ -128,7 +143,10 @@ app.whenReady().then(() => {
   });
   ipcMain.handle('system:stats', () => systemStats());
   ipcMain.handle('wallpaper:choose', async () => {
-    const answer = await dialog.showOpenDialog(mainWindow, { title: 'Выберите обои рабочего стола', properties: ['openFile'], filters: [{ name: 'Изображения', extensions: ['png', 'jpg', 'jpeg', 'webp', 'bmp'] }] });
+    const answer = await dialog.showOpenDialog(mainWindow, {
+      title: 'Выберите обои рабочего стола', properties: ['openFile'],
+      filters: [{ name: 'Изображения', extensions: ['png', 'jpg', 'jpeg', 'webp', 'bmp'] }]
+    });
     return answer.canceled ? '' : answer.filePaths[0];
   });
   ipcMain.handle('window:minimize', () => mainWindow.minimize());
