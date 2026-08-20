@@ -9,9 +9,9 @@ let launchCatalog = new Map();
 const settingsPath = path.join(app.getPath('userData'), 'settings.json');
 const defaultSettings = {
   theme: 'violet', language: 'ru', reduceMotion: false, showIcons: true,
-  showClock: true, showWidgets: true, iconSize: 'comfortable', autoHide: false,
+  showWidgets: false, iconSize: 'comfortable', autoHide: false,
   centerApps: true, dockStyle: 'floating', wallpaperPath: '', wallpaperDim: 42,
-  pinnedIds: []
+  focusMode: false, pinnedIds: []
 };
 
 function readSettings() {
@@ -23,7 +23,7 @@ function sanitizeSettings(input = {}) {
   const result = { ...previous };
   if (['violet', 'red', 'ocean'].includes(input.theme)) result.theme = input.theme;
   if (['ru', 'en'].includes(input.language)) result.language = input.language;
-  ['reduceMotion', 'showIcons', 'showClock', 'showWidgets', 'autoHide', 'centerApps'].forEach(key => {
+  ['reduceMotion', 'showIcons', 'showWidgets', 'autoHide', 'centerApps', 'focusMode'].forEach(key => {
     if (typeof input[key] === 'boolean') result[key] = input[key];
   });
   if (['compact', 'comfortable', 'large'].includes(input.iconSize)) result.iconSize = input.iconSize;
@@ -42,7 +42,7 @@ function saveSettings(settings) {
 function safeStat(file) { try { return fs.statSync(file); } catch { return null; } }
 function makeId(file) { return crypto.createHash('sha256').update(file).digest('hex').slice(0, 18); }
 function labelFor(file) { return path.basename(file, path.extname(file)).replace(/\.lnk$/i, '') || path.basename(file); }
-function iconFor(name) {
+function fallbackIcon(name) {
   const value = name.toLowerCase();
   if (/(steam|game|roblox|discord|epic|battle)/.test(value)) return '◈';
   if (/(chrome|edge|firefox|browser|брауз)/.test(value)) return '◉';
@@ -52,17 +52,6 @@ function iconFor(name) {
   if (/(photo|paint|фото|image)/.test(value)) return '◫';
   return '◩';
 }
-function nativeIconPath(file) {
-  try {
-    if (/\.lnk$/i.test(file) && process.platform === 'win32') {
-      const details = shell.readShortcutLink(file);
-      if (details && details.icon) return details.icon;
-      if (details && details.target && /\.exe$/i.test(details.target)) return details.target;
-    }
-    if (/\.exe$/i.test(file)) return file;
-  } catch { /* Неудачное чтение значка не должно блокировать каталог */ }
-  return '';
-}
 function toneFor(name) {
   const value = name.toLowerCase();
   if (/(steam|game|roblox|discord|battle)/.test(value)) return 'violet';
@@ -71,36 +60,42 @@ function toneFor(name) {
   if (/(word|excel|office)/.test(value)) return 'blue';
   return 'silver';
 }
-function collectEntries(root, limit = 120, maxDepth = 4) {
-  const found = [];
+async function iconDataFor(file) {
+  try {
+    const image = await app.getFileIcon(file, { size: 'normal' });
+    return image && !image.isEmpty() ? image.toDataURL() : '';
+  } catch { return ''; }
+}
+async function collectEntries(root, limit = 120, maxDepth = 4) {
+  const files = [];
   function walk(dir, depth) {
-    if (found.length >= limit || depth > maxDepth) return;
+    if (files.length >= limit || depth > maxDepth) return;
     let entries = [];
     try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return; }
     for (const entry of entries) {
-      if (found.length >= limit || entry.name.startsWith('.')) break;
+      if (files.length >= limit) break;
+      if (entry.name.startsWith('.')) continue;
       const itemPath = path.join(dir, entry.name);
       if (entry.isDirectory()) { walk(itemPath, depth + 1); continue; }
-      if (!/\.(lnk|url|exe)$/i.test(entry.name)) continue;
-      found.push({
-        id: makeId(itemPath), name: labelFor(itemPath), path: itemPath,
-        icon: iconFor(entry.name), iconPath: nativeIconPath(itemPath),
-        tone: toneFor(entry.name), kind: 'app'
-      });
+      if (/\.(lnk|url|exe)$/i.test(entry.name)) files.push(itemPath);
     }
   }
   walk(root, 0);
-  return found;
+  return Promise.all(files.map(async itemPath => ({
+    id: makeId(itemPath), name: labelFor(itemPath), path: itemPath,
+    icon: fallbackIcon(itemPath), iconData: await iconDataFor(itemPath),
+    tone: toneFor(itemPath), kind: 'app'
+  })));
 }
 function knownFolders() {
   return [
-    { id: 'folder:desktop', name: 'Рабочий стол', path: app.getPath('desktop'), icon: '▧', tone: 'folder', kind: 'folder' },
-    { id: 'folder:documents', name: 'Документы', path: app.getPath('documents'), icon: '▤', tone: 'folder', kind: 'folder' },
-    { id: 'folder:downloads', name: 'Загрузки', path: app.getPath('downloads'), icon: '↓', tone: 'folder', kind: 'folder' },
-    { id: 'folder:home', name: 'Этот компьютер', path: app.getPath('home'), icon: '▣', tone: 'blue', kind: 'folder' }
+    { id: 'folder:desktop', name: 'Рабочий стол', path: app.getPath('desktop'), icon: '▧', tone: 'folder', kind: 'folder', iconData: '' },
+    { id: 'folder:documents', name: 'Документы', path: app.getPath('documents'), icon: '▤', tone: 'folder', kind: 'folder', iconData: '' },
+    { id: 'folder:downloads', name: 'Загрузки', path: app.getPath('downloads'), icon: '↓', tone: 'folder', kind: 'folder', iconData: '' },
+    { id: 'folder:home', name: 'Этот компьютер', path: app.getPath('home'), icon: '▣', tone: 'blue', kind: 'folder', iconData: '' }
   ];
 }
-function refreshCatalog() {
+async function refreshCatalog() {
   const appData = process.env.APPDATA || path.join(app.getPath('appData'), 'Roaming');
   const programData = process.env.ProgramData || (process.platform === 'win32' ? 'C:\\ProgramData' : '');
   const publicDir = process.env.PUBLIC || (process.platform === 'win32' ? 'C:\\Users\\Public' : '');
@@ -109,9 +104,9 @@ function refreshCatalog() {
     path.join(appData, 'Microsoft', 'Windows', 'Start Menu', 'Programs'),
     programData && path.join(programData, 'Microsoft', 'Windows', 'Start Menu', 'Programs')
   ].filter(Boolean);
-  const desktopApps = desktopRoots.flatMap(dir => collectEntries(dir, 50, 1));
+  const desktopApps = (await Promise.all(desktopRoots.map(dir => collectEntries(dir, 50, 1)))).flat();
   const seen = new Set(desktopApps.map(item => item.path.toLowerCase()));
-  const startApps = startRoots.flatMap(dir => collectEntries(dir, 160, 4)).filter(item => !seen.has(item.path.toLowerCase()));
+  const startApps = (await Promise.all(startRoots.map(dir => collectEntries(dir, 160, 4)))).flat().filter(item => !seen.has(item.path.toLowerCase()));
   const system = knownFolders();
   const all = [...system, ...desktopApps, ...startApps];
   launchCatalog = new Map(all.map(item => [item.id, item]));
