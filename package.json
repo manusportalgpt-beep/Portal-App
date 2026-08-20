@@ -1,0 +1,25 @@
+{
+  "name": "windows12-launcher",
+  "version": "0.1.0",
+  "description": "Безопасный локальный лаунчер Windows 12 в стиле Liquid Glass",
+  "main": "src/main.js",
+  "author": "Windows 12 Launcher",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "build:win": "electron-builder --win portable --x64",
+    "build:dir": "electron-builder --dir"
+  },
+  "devDependencies": {
+    "electron": "^31.0.0",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "com.windows12.launcher",
+    "productName": "Windows 12 Launcher",
+    "asar": true,
+    "files": ["src/**/*", "package.json"],
+    "directories": {"output": "release"},
+    "win": {"target": [{"target": "portable", "arch": ["x64"]}], "artifactName": "Windows12-Launcher-${version}-x64.${ext}", "signAndEditExecutable": false}
+  }
+}

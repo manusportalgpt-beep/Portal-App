@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; img-src 'self' data:; connect-src 'none';">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Windows 12</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="ambient ambient-a"></div><div class="ambient ambient-b"></div><div class="noise"></div>
+  <main id="app" class="app-shell">
+    <header class="topbar drag-region">
+      <div class="brand no-drag"><div class="brand-mark"><i></i><i></i><i></i><i></i></div><span>Windows <b>12</b></span></div>
+      <div class="topbar-center no-drag"><span class="status-dot"></span><span id="privacy-status">Локальный режим · данные не отправляются</span></div>
+      <div class="window-controls no-drag"><button id="minimize" aria-label="Свернуть">—</button><button id="close" aria-label="Закрыть">×</button></div>
+    </header>
+
+    <section class="desktop-content">
+      <div class="hero-copy reveal"><p class="eyebrow">Добро пожаловать домой</p><h1>Ваш компьютер.<br><span>В новом свете.</span></h1><p class="hero-subtitle">Чистое рабочее пространство для приложений, файлов и идей — с полным контролем на вашем ПК.</p><div class="hero-actions"><button class="primary-button" id="open-start"><span class="button-icon">⊞</span> Открыть меню Пуск</button><button class="quiet-button" id="open-settings">Настроить оболочку <span>↗</span></button></div></div>
+      <div class="dashboard-grid reveal delay-1">
+        <article class="glass-card system-card"><div class="card-header"><span>Состояние системы</span><span class="live-pill"><i></i> В сети</span></div><div class="system-main"><div class="orb"><div class="orb-inner">12</div></div><div><strong>Всё работает отлично</strong><p id="system-caption">Ваши данные остаются на этом компьютере.</p></div></div><div class="metrics"><div><span>Память</span><strong>42%</strong><div class="meter"><i style="width:42%"></i></div></div><div><span>Хранилище</span><strong>68%</strong><div class="meter pink"><i style="width:68%"></i></div></div></div></article>
+        <article class="glass-card focus-card"><div class="card-header"><span>Фокус дня</span><span class="more">•••</span></div><div class="focus-time">25 <small>мин</small></div><p>Сделайте небольшую паузу,<br>чтобы сохранить концентрацию.</p><button class="card-button">Запустить таймер <span>→</span></button></article>
+        <article class="glass-card recent-card"><div class="card-header"><span>Недавние файлы</span><button class="text-button" id="open-home">Открыть все</button></div><div class="file-list"><button class="file-row" data-path="."><span class="file-icon purple">◫</span><span><b>Мои документы</b><small>Папка · только что</small></span><span class="file-arrow">›</span></button><button class="file-row" data-path="."><span class="file-icon blue">▤</span><span><b>Рабочий стол</b><small>Папка · сегодня</small></span><span class="file-arrow">›</span></button><button class="file-row" data-path="."><span class="file-icon orange">▧</span><span><b>Загрузки</b><small>Папка · вчера</small></span><span class="file-arrow">›</span></button></div></article>
+      </div>
+    </section>
+
+    <section id="start-menu" class="start-menu glass-panel hidden"><div class="start-head"><div><p class="eyebrow">Ваше пространство</p><h2>Меню Пуск</h2></div><button class="round-button" id="close-start">×</button></div><div class="search-box"><span>⌕</span><input id="app-search" placeholder="Поиск приложений, настроек и файлов" /></div><div class="section-title"><span>Закреплённые</span><button class="text-button">Все приложения ›</button></div><div class="app-grid" id="app-grid"></div><div class="section-title lower"><span>Рекомендации</span><span class="muted">Обновлено сейчас</span></div><div class="recommendation"><span class="file-icon blue">▤</span><span><b>Продолжить с рабочего стола</b><small>Откройте локальные файлы на вашем ПК</small></span><button class="round-button">›</button></div></section>
+
+    <section id="settings-panel" class="settings-panel glass-panel hidden"><div class="start-head"><div><p class="eyebrow">Персонализация</p><h2>Настройки</h2></div><button class="round-button" id="close-settings">×</button></div><div class="settings-layout"><nav class="settings-nav"><button class="active">Внешний вид</button><button>Панель задач</button><button>Язык</button><button>Конфиденциальность</button></nav><div class="settings-body"><div class="setting-block"><h3>Тема оформления</h3><p>Выберите настроение рабочего пространства.</p><div class="theme-options"><button class="theme-option active" data-theme="violet"><span class="theme-preview violet-preview"></span><b>Фиолетовый свет</b><small>Градиент по умолчанию</small></button><button class="theme-option" data-theme="red"><span class="theme-preview red-preview"></span><b>Красная ночь</b><small>Контрастный тёмный стиль</small></button></div></div><div class="setting-block"><h3>Плавность интерфейса</h3><p>Управляйте анимациями наведения и переходов.</p><label class="toggle-row"><span>Красивые анимации</span><input id="motion-toggle" type="checkbox" checked><i class="toggle"></i></label></div><div class="setting-block"><h3>Язык интерфейса</h3><p>Русский активен. English доступен для переключения.</p><div class="language-switch"><button class="active">Русский</button><button>English</button></div></div></div></div></section>
+
+    <footer class="taskbar"><button class="task-start" id="task-start"><span class="brand-mark small"><i></i><i></i><i></i><i></i></span></button><div class="task-pinned" id="task-pinned"></div><div class="task-tray"><span id="clock">12:48</span><span class="tray-icon">⌁</span><span class="tray-icon">◒</span></div></footer>
+  </main>
+  <div id="onboarding" class="onboarding hidden"><div class="onboard-glow"></div><div class="onboard-content"><div class="brand-mark large"><i></i><i></i><i></i><i></i></div><p class="eyebrow">Новая глава начинается</p><h2>Добро пожаловать<br>в <span>Windows 12</span></h2><p>Безопасная оболочка, которая живёт на вашем компьютере и нигде больше.</p><div class="loading-line"><i></i></div><small>Настраиваем ваше пространство…</small></div></div>
+  <script src="renderer.js"></script>
+</body>
+</html>
