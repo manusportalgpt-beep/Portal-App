@@ -8,6 +8,7 @@ from typing import Any
 
 
 APP_NAME = "Voxel Vanilla Launcher"
+DEFAULT_AZURE_CLIENT_ID = "c36a9fb6-4f2a-41ff-90bd-ae7cc92031eb"
 
 
 def app_directory() -> Path:
@@ -28,7 +29,7 @@ class Settings:
     minecraft_directory: str = default_minecraft_directory()
     selected_version: str = "latest-release"
     memory_mb: int = 4096
-    azure_client_id: str = ""
+    azure_client_id: str = DEFAULT_AZURE_CLIENT_ID
     redirect_uri: str = "http://localhost:53618/callback"
     account_name: str = ""
     account_uuid: str = ""
@@ -47,7 +48,11 @@ class SettingsStore:
         except (OSError, json.JSONDecodeError):
             return Settings()
         known = {field: raw[field] for field in Settings.__dataclass_fields__ if field in raw}
-        return Settings(**known)
+        settings = Settings(**known)
+        # Migrate previous releases where the field existed but was left blank.
+        if not settings.azure_client_id.strip():
+            settings.azure_client_id = DEFAULT_AZURE_CLIENT_ID
+        return settings
 
     def save(self, settings: Settings) -> None:
         temporary = self.path.with_suffix(".tmp")
