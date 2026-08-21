@@ -11,4 +11,4 @@ pyinstaller --noconfirm --clean --windowed --onefile `
   --hidden-import keyring.backends.Windows.WinVaultKeyring `
   main.py
 
-Write-Host "Готово: dist\VoxelVanillaLauncher.exe"
+Write-Host "Done: dist\VoxelVanillaLauncher.exe"
