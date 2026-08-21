@@ -350,9 +350,6 @@ class VoxelVanillaApp(tk.Tk):
 
     def search_packs(self) -> None:
         query = self.pack_query.get().strip()
-        if not query:
-            self.status_value.set("Введите название ресурс-пака.")
-            return
         self.save_settings()
         def task() -> tuple[str, list[ResourcePack]]:
             version = self.minecraft.resolve_version(self.version_value.get())
@@ -363,7 +360,7 @@ class VoxelVanillaApp(tk.Tk):
         self.selected_pack = None
         self.install_pack_button.configure(state="disabled")
         self.pack_title.configure(text="Каталог пуст" if not packs else "Выберите ресурс-пак")
-        self.pack_description.configure(text="Совместимые результаты не найдены." if not packs else "Нажмите на строку слева, чтобы посмотреть информацию и установить совместимый файл.")
+        self.pack_description.configure(text="Совместимые результаты не найдены." if not packs else "Нажмите на строку слева, чтобы посмотреть информацию. Перед установкой лаунчер повторно проверит точную совместимость.")
         self.pack_meta.configure(text="")
         for child in self.pack_list.winfo_children():
             child.destroy()
@@ -383,7 +380,8 @@ class VoxelVanillaApp(tk.Tk):
             self._label(copy, pack.title, 10, TEXT, "bold", bg=PANEL, anchor="w").pack(fill="x")
             description = (pack.description or "Без описания").replace("\n", " ")
             self._label(copy, description[:120], 8, MUTED, bg=PANEL, anchor="w").pack(fill="x", pady=(3, 0))
-            self._label(copy, f"{pack.downloads:,} скачиваний · {', '.join(pack.categories[:3]) or 'resourcepack'}", 8, MUTED, bg=PANEL, anchor="w").pack(fill="x", pady=(4, 0))
+            compatibility = "точно совместим" if pack.exact_version_match else "проверка при установке"
+            self._label(copy, f"{pack.downloads:,} скачиваний · {compatibility} · {', '.join(pack.categories[:2]) or 'resourcepack'}", 8, MUTED, bg=PANEL, anchor="w").pack(fill="x", pady=(4, 0))
             for widget in (row, icon, copy, *copy.winfo_children()):
                 widget.bind("<Button-1>", lambda _, item=pack, frame=row: self._select_pack(item, frame))
             self.pack_widgets[pack.project_id] = icon
@@ -407,7 +405,9 @@ class VoxelVanillaApp(tk.Tk):
         frame.configure(bg="#243015")
         self.pack_title.configure(text=pack.title)
         self.pack_description.configure(text=pack.description or "Описание не предоставлено автором.")
-        self.pack_meta.configure(text=f"Совместимо с {self.pack_version_label.cget('text').replace('Версия: ', '')}\n{pack.downloads:,} скачиваний\n{', '.join(pack.categories) or 'resourcepack'}")
+        version = self.pack_version_label.cget('text').replace('Версия: ', '')
+        compatibility = f"Точно совместим с {version}" if pack.exact_version_match else f"Совместимость с {version} будет проверена перед загрузкой"
+        self.pack_meta.configure(text=f"{compatibility}\n{pack.downloads:,} скачиваний\n{', '.join(pack.categories) or 'resourcepack'}")
         self.install_pack_button.configure(state="normal")
 
     def install_selected_pack(self) -> None:
@@ -454,7 +454,7 @@ class VoxelVanillaApp(tk.Tk):
         elif event.kind == "pack-search":
             version, packs = event.payload
             self._show_packs(version, packs)
-            self.status_value.set(f"Найдено совместимых ресурс-паков: {len(packs)}")
+            self.status_value.set(f"Каталог Modrinth: найдено наборов — {len(packs)}")
         elif event.kind == "pack-icon":
             project_id, raw = event.payload
             label = self.pack_widgets.get(project_id)
@@ -475,8 +475,9 @@ class VoxelVanillaApp(tk.Tk):
         elif event.kind == "task-error":
             name, error = event.payload
             self.progress_value.set(0)
-            self.status_value.set("Операция не завершена.")
-            messagebox.showerror("Voxel Vanilla Launcher", error)
+            operation = {"pack-search": "поиск Modrinth", "pack-install": "установка ресурс-пака", "launch": "запуск Minecraft", "login": "подключение основного ника"}.get(name, name)
+            self.status_value.set(f"Ошибка: {operation} — {error}")
+            messagebox.showerror("Voxel Vanilla Launcher", f"Не удалось выполнить: {operation}.\n\n{error}")
 
 
 def main() -> None:
