@@ -102,7 +102,7 @@ class CallbackServer:
 
 def microsoft_login(client_id: str, redirect_uri: str, status: Callable[[str], None]) -> Account:
     if not client_id.strip():
-        raise ValueError("Добавьте Client ID своего Azure-приложения в настройках лаунчера.")
+        raise ValueError("Добавьте Client ID основного профиля в настройках лаунчера.")
     server = CallbackServer(redirect_uri)
     server.start()
     try:
@@ -127,7 +127,7 @@ def microsoft_login(client_id: str, redirect_uri: str, status: Callable[[str], N
 def refresh_account(client_id: str) -> Account:
     token = TokenVault.load()
     if not client_id.strip() or not token:
-        raise ValueError("Войдите через Microsoft перед запуском игры.")
+        raise ValueError("Подключите основной Minecraft-профиль перед запуском игры.")
     response = minecraft_launcher_lib.microsoft_account.complete_refresh(client_id, token)
     TokenVault.save(response["refresh_token"])
     return Account(

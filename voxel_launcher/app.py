@@ -48,12 +48,14 @@ class VoxelVanillaApp(tk.Tk):
         self.version_filter = tk.StringVar(value="Все версии")
         self.pack_query = tk.StringVar(value=self.settings.last_resourcepack_query)
         self.status_value = tk.StringVar(value="Подготавливаем каталог Vanilla…")
-        self.account_value = tk.StringVar(value=self.settings.account_name or "Вход не выполнен")
+        self.account_value = tk.StringVar(value=self.settings.account_name or "Основной ник не подключён")
+        self.profile_hint_value = tk.StringVar(value="Подключите основной Minecraft-профиль один раз.")
         self.runtime_value = tk.StringVar(value="Java Runtime определится после выбора версии")
         self.progress_value = tk.DoubleVar(value=0)
 
         self._style()
         self._build_shell()
+        self._update_profile_ui()
         self.show_page("game")
         self.after(80, self._poll_events)
         self.load_versions()
@@ -95,7 +97,7 @@ class VoxelVanillaApp(tk.Tk):
         sidebar.pack(side="left", fill="y")
         sidebar.pack_propagate(False)
         self.nav_buttons: dict[str, tk.Button] = {}
-        for key, title, hint in [("game", "Игра", "Версии и запуск"), ("packs", "Ресурс-паки", "Modrinth каталог"), ("settings", "Настройки", "Путь, Java, аккаунт")]:
+        for key, title, hint in [("game", "Игра", "Версии и запуск"), ("packs", "Ресурс-паки", "Modrinth каталог"), ("settings", "Настройки", "Путь, Java, профиль")]:
             button = tk.Button(sidebar, text=f"{title}\n{hint}", justify="left", anchor="w", command=lambda page=key: self.show_page(page), font=(FONT, 10, "bold"), fg=TEXT, bg="#0c0d0f", activebackground=PANEL, activeforeground=TEXT, bd=0, padx=20, pady=12, cursor="hand2")
             button.pack(fill="x", pady=(18 if key == "game" else 0, 2))
             self.nav_buttons[key] = button
@@ -126,7 +128,7 @@ class VoxelVanillaApp(tk.Tk):
         content.pack(fill="both", expand=True, padx=48, pady=42)
         self._label(content, "VANILLA MINECRAFT", 8, ACCENT, "bold").pack(anchor="w")
         self._label(content, "Игра без лишнего.", 28, TEXT, "bold").pack(anchor="w", pady=(6, 4))
-        self._label(content, "Официальные версии, Minecraft Java Runtime и ваш настоящий Microsoft-профиль.", 10, MUTED).pack(anchor="w")
+        self._label(content, "Официальные версии, Minecraft Java Runtime и запуск от вашего основного ника.", 10, MUTED).pack(anchor="w")
 
         split = tk.Frame(content, bg=BG)
         split.pack(fill="both", expand=True, pady=(36, 0))
@@ -151,9 +153,15 @@ class VoxelVanillaApp(tk.Tk):
         launch = self._button(main, "УСТАНОВИТЬ И ЗАПУСТИТЬ", self.install_and_launch, primary=True)
         launch.pack(anchor="w", padx=24, pady=(0, 24))
 
-        self._label(side, "ПРОФИЛЬ", 8, MUTED, "bold", bg="#141619").pack(anchor="w", padx=20, pady=(23, 8))
+        self._label(side, "ОСНОВНОЙ НИК", 8, MUTED, "bold", bg="#141619").pack(anchor="w", padx=20, pady=(23, 8))
         self._label(side, textvariable=self.account_value, size=13, color=TEXT, weight="bold", bg="#141619", wraplength=210, justify="left").pack(anchor="w", padx=20)
-        self._button(side, "Войти через Microsoft", self.login_microsoft).pack(anchor="w", padx=20, pady=(13, 24))
+        self._label(side, textvariable=self.profile_hint_value, size=8, color=MUTED, bg="#141619", wraplength=210, justify="left").pack(anchor="w", padx=20, pady=(7, 0))
+        profile_actions = tk.Frame(side, bg="#141619")
+        profile_actions.pack(anchor="w", padx=20, pady=(13, 24))
+        self.profile_button = self._button(profile_actions, "Подключить ник", self.connect_primary_profile)
+        self.profile_button.pack(side="left")
+        self.disconnect_button = self._button(profile_actions, "Сброс", self.disconnect_profile, font=(FONT, 8))
+        self.disconnect_button.pack(side="left", padx=(7, 0))
         tk.Frame(side, bg=LINE, height=1).pack(fill="x", padx=20)
         self._label(side, "JAVA RUNTIME", 8, MUTED, "bold", bg="#141619").pack(anchor="w", padx=20, pady=(23, 7))
         self._label(side, textvariable=self.runtime_value, size=10, color=TEXT, bg="#141619", wraplength=210, justify="left").pack(anchor="w", padx=20)
@@ -218,8 +226,8 @@ class VoxelVanillaApp(tk.Tk):
         panel.pack(fill="x")
         self.path_input = self._setting_input(panel, "Minecraft directory", "Папка официальной игры и resourcepacks", self.settings.minecraft_directory)
         self.memory_input = self._setting_input(panel, "Память JVM (МБ)", "Минимум 1024, по умолчанию 4096", str(self.settings.memory_mb))
-        self.client_input = self._setting_input(panel, "Azure Client ID", "Нужен для защищённого Microsoft-входа. Не используйте чужой Client ID.", self.settings.azure_client_id)
-        self._label(panel, "Вход открывает Microsoft в системном браузере. Пароль не попадает в лаунчер; refresh token хранится в системном Credential Manager, если он доступен.", 9, MUTED, bg=PANEL, wraplength=650, justify="left").pack(anchor="w", padx=24, pady=(7, 18))
+        self.client_input = self._setting_input(panel, "Client ID основного профиля", "Требуется один раз для защищённого подтверждения лицензионного Minecraft-профиля. Не используйте чужой Client ID.", self.settings.azure_client_id)
+        self._label(panel, "После подтверждения лаунчер показывает и запускает основной ник без нового браузерного входа. Пароль не попадает в приложение; refresh token хранится в системном Credential Manager, если он доступен.", 9, MUTED, bg=PANEL, wraplength=650, justify="left").pack(anchor="w", padx=24, pady=(7, 18))
         self._button(panel, "Сохранить настройки", self.save_settings, primary=True).pack(anchor="w", padx=24, pady=(0, 24))
         return page
 
@@ -242,6 +250,23 @@ class VoxelVanillaApp(tk.Tk):
         if page == "packs":
             self.pack_query.set("")
             self.after_idle(lambda: self.pack_search_input.focus_set())
+
+    def _has_primary_session(self) -> bool:
+        return bool(self.settings.account_name and TokenVault.load())
+
+    def _update_profile_ui(self) -> None:
+        if self._has_primary_session():
+            self.account_value.set(self.settings.account_name)
+            self.profile_hint_value.set("Подтверждённый профиль. Запуск использует сохранённую официальную сессию.")
+            self.profile_button.configure(text="Сменить ник")
+            if not self.disconnect_button.winfo_ismapped():
+                self.disconnect_button.pack(side="left", padx=(7, 0))
+            self.disconnect_button.configure(state="normal")
+        else:
+            self.account_value.set("Основной ник не подключён")
+            self.profile_hint_value.set("Подключите основной Minecraft-профиль один раз.")
+            self.profile_button.configure(text="Подключить ник")
+            self.disconnect_button.pack_forget()
 
     def _filter_versions(self, value: str) -> None:
         self.version_filter.set(value)
@@ -289,12 +314,27 @@ class VoxelVanillaApp(tk.Tk):
         self.status_value.set("Настройки сохранены локально.")
         self._version_changed()
 
-    def login_microsoft(self) -> None:
+    def connect_primary_profile(self) -> None:
         self.save_settings()
+        if self._has_primary_session():
+            if not messagebox.askyesno("Смена основного профиля", "Сбросить сохранённую сессию и подтвердить другой основной ник?"):
+                return
+            self.disconnect_profile(quiet=True)
+
         def task() -> dict[str, str]:
             account = microsoft_login(self.settings.azure_client_id, self.settings.redirect_uri, lambda text: self.tasks.send("status", text))
             return {"name": account.name, "uuid": account.uuid}
         self.tasks.run("login", task)
+
+    def disconnect_profile(self, quiet: bool = False) -> None:
+        if not quiet and not messagebox.askyesno("Сброс профиля", "Удалить сохранённую сессию основного ника с этого компьютера?"):
+            return
+        TokenVault.clear()
+        self.settings.account_name = ""
+        self.settings.account_uuid = ""
+        self.store.save(self.settings)
+        self._update_profile_ui()
+        self.status_value.set("Основной профиль сброшен на этом компьютере.")
 
     def install_and_launch(self) -> None:
         self.save_settings()
@@ -403,11 +443,13 @@ class VoxelVanillaApp(tk.Tk):
             self.settings.account_name = event.payload["name"]
             self.settings.account_uuid = event.payload["uuid"]
             self.store.save(self.settings)
-            self.account_value.set(event.payload["name"])
-            self.status_value.set("Microsoft-профиль подключён. Можно установить и запустить игру.")
+            self._update_profile_ui()
+            self.status_value.set(f"Основной ник «{event.payload['name']}» подключён. Можно запускать игру.")
         elif event.kind == "launch":
-            self.account_value.set(event.payload["name"])
-            self.status_value.set(f"Minecraft {event.payload['version']} запущен.")
+            self.settings.account_name = event.payload["name"]
+            self.store.save(self.settings)
+            self._update_profile_ui()
+            self.status_value.set(f"Minecraft {event.payload['version']} запущен как {event.payload['name']}.")
             self.progress_value.set(0)
         elif event.kind == "pack-search":
             version, packs = event.payload
