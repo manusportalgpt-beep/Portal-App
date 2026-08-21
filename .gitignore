@@ -1,4 +1,8 @@
-node_modules/
-release/
-.DS_Store
+__pycache__/
+*.py[cod]
+*.spec
+build/
+dist/
+.vscode/
+.env
 *.log
