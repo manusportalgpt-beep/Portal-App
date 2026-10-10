@@ -1,0 +1,60 @@
+name: Portal-App Windows x64 fast build
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: portal-app-windows-x64-fast
+  cancel-in-progress: true
+
+env:
+  TURBO_TELEMETRY_DISABLED: 1
+  pnpm_config_color: always
+
+jobs:
+  build-windows-x64:
+    name: Build Windows x64 installer
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          target: x86_64-pc-windows-msvc
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Enable Corepack
+        shell: bash
+        run: corepack enable
+
+      - name: Install dependencies
+        shell: bash
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate i18n coverage artifact
+        shell: bash
+        run: node --experimental-strip-types scripts/coverage-i18n.ts --write packages/ui/src/layouts/wrapped/settings/language-settings/language-settings-coverage.generated.ts --quiet
+
+      - name: Build unsigned Windows x64 NSIS installer
+        shell: bash
+        run: pnpm --filter=@modrinth/app run tauri build --target x86_64-pc-windows-msvc --bundles nsis --config tauri.conf.json --verbose
+
+      - name: Upload Windows x64 installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: Portal-App-Windows-x64
+          if-no-files-found: error
+          path: |
+            apps/app/target/x86_64-pc-windows-msvc/release/bundle/nsis/*-setup.exe
+            apps/app/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.nsis.zip
+          retention-days: 7
