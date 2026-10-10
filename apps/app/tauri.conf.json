@@ -58,7 +58,7 @@
 	"productName": "Portal-App",
 	"version": "../app-frontend/package.json",
 	"mainBinaryName": "Portal-App",
-	"identifier": "ModrinthApp",
+	"identifier": "com.portal.app",
 	"plugins": {
 		"deep-link": {
 			"desktop": {
