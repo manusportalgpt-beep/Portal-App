@@ -1,39 +1,47 @@
-# ![Modrinth Monorepo Cover](/.github/assets/monorepo_cover.png)
+# Portal-App
 
-![Issues](https://img.shields.io/github/issues-raw/Modrinth/code?color=c78aff&label=issues&style=for-the-badge)
-![Pull Requests](https://img.shields.io/github/issues-pr-raw/Modrinth/code?color=c78aff&label=PRs&style=for-the-badge)
-![Contributors](https://img.shields.io/github/contributors/Modrinth/code?color=c78aff&label=contributors&style=for-the-badge)
-![Lines of Code](https://img.shields.io/endpoint?url=https://loctopus.creeperkatze.dev/github/modrinth/code/badge?style=flat&logoColor=white&color=c78aff&style=for-the-badge)
-![Commit Activity](https://img.shields.io/github/commit-activity/m/Modrinth/code?color=c78aff&label=commits&style=for-the-badge)
-![Last Commit](https://img.shields.io/github/last-commit/Modrinth/code?color=c78aff&label=last%20commit&style=for-the-badge)
+Desktop-Р»Р°СѓРЅС‡РµСЂ Minecraft РЅР° Р±Р°Р·Рµ [Modrinth App](https://github.com/modrinth/code).
 
-## Modrinth Monorepo
+Р­С‚Рѕ С„РѕСЂРє РјРѕРЅРѕСЂРµРїРѕР·РёС‚РѕСЂРёСЏ Modrinth. Р’Р·СЏС‚ РёРЅС‚РµСЂС„РµР№СЃ Рё СѓСЃС‚СЂРѕР№СЃС‚РІРѕ РїСЂРёР»РѕР¶РµРЅРёСЏ,
+Р·Р°РјРµРЅРµРЅС‹ РЅР°Р·РІР°РЅРёРµ, РёРєРѕРЅРєР° Рё РёРґРµРЅС‚РёС„РёРєР°С‚РѕСЂ РїСЂРёР»РѕР¶РµРЅРёСЏ.
 
-Welcome to the Modrinth Monorepo, the primary codebase for the Modrinth web interface and app. It contains ![Lines of code](https://img.shields.io/endpoint?url=https://loctopus.creeperkatze.dev/github/modrinth/code/badge%3Fformat%3Dhuman&logoColor=white&color=black&label=) lines of code and has ![Contributors](https://img.shields.io/github/contributors/Modrinth/code?color=black&label=) contributors!
+## Р§С‚Рѕ СЌС‚Рѕ
 
-If you're not a developer and you've stumbled upon this repository, you can access the web interface on the [Modrinth website](https://modrinth.com) and download the latest release of the app [here](https://modrinth.com/app).
+- Р¤РѕСЂРє Modrinth App (`apps/app`, `apps/app-frontend`, `packages/ui`, `packages/app-lib`)
+- РџРµСЂРµРёРјРµРЅРѕРІР°РЅРёРµ РІ `Portal-App`: `productName`, `title`, `identifier`, РёРєРѕРЅРєРё, СѓСЃС‚Р°РЅРѕРІС‰РёРє
+- Р›РёС†РµРЅР·РёСЏ вЂ” GPL-3.0, РєР°Рє Рё Сѓ РѕСЂРёРіРёРЅР°Р»Р°
 
-## Development
+## РЎР±РѕСЂРєР° Windows x64
 
-This repository contains two primary packages. For detailed development information, please refer to their respective guides:
+```bash
+pnpm install --frozen-lockfile
+cp packages/app-lib/.env.prod packages/app-lib/.env
+pnpm --filter=@modrinth/app run tauri build --target x86_64-pc-windows-msvc --bundles nsis
+```
 
-- [Website frontend](https://docs.modrinth.com/contributing/knossos/)
-- [Desktop app](https://docs.modrinth.com/contributing/theseus/)
+РџРµСЂРµРјРµРЅРЅС‹Рµ РѕРєСЂСѓР¶РµРЅРёСЏ `MODRINTH_*` РѕР±СЏР·Р°С‚РµР»СЊРЅС‹ РЅР° СЌС‚Р°РїРµ РєРѕРјРїРёР»СЏС†РёРё: Rust
+С‡РёС‚Р°РµС‚ РёС… С‡РµСЂРµР· `env!()`, Р° РЅРµ РёР· С„Р°Р№Р»Р° `.env`. Р‘РµР· РЅРёС… СЃР±РѕСЂРєР° РїР°РґР°РµС‚ СЃ
+`environment variable MODRINTH_API_URL not defined at compile time`.
 
-## Contributing
+Р“РѕС‚РѕРІС‹Р№ workflow: **Actions в†’ Portal-App Windows x64 fast build в†’ Run workflow**.
 
-We welcome contributions! Before submitting any contributions, please read our [contributing guidelines](https://docs.modrinth.com/contributing/getting-started/).
+РђСЂС‚РµС„Р°РєС‚ `Portal-App-Windows-x64` СЃРѕРґРµСЂР¶РёС‚ NSIS-РёРЅСЃС‚Р°Р»Р»СЏС‚РѕСЂ.
+РРЅСЃС‚Р°Р»Р»СЏС‚РѕСЂ СЃРѕР±РёСЂР°РµС‚СЃСЏ РІ `target/x86_64-pc-windows-msvc/release/bundle/nsis/`
+РІ РєРѕСЂРЅРµ СЂРµРїРѕР·РёС‚РѕСЂРёСЏ, Р° РЅРµ РІ `apps/app/target/`.
 
-If you plan to fork this repository for your own purposes, please review our [copying guidelines](COPYING.md).
+## Р‘СЂРµРЅРґРёРЅРі
 
-## Security
+РџРѕ СѓСЃР»РѕРІРёСЏРј `COPYING.md` РѕСЂРёРіРёРЅР°Р»Р° РІСЃРµ РіСЂР°С„РёС‡РµСЃРєРёРµ СЌР»РµРјРµРЅС‚С‹ Modrinth
+СѓРґР°Р»РµРЅС‹: Р»РѕРіРѕС‚РёРї, РѕР±Р»РѕР¶РєРё, РёРєРѕРЅРєРё Р·Р°РјРµРЅРµРЅС‹. РќР°Р·РІР°РЅРёРµ Рё РёРєРѕРЅРєР° вЂ” СЃРІРѕРё,
+СЌС‚Рѕ РѕР±СЏР·Р°С‚РµР»СЊРЅРѕРµ СѓСЃР»РѕРІРёРµ РёСЃРїРѕР»СЊР·РѕРІР°РЅРёСЏ РёС… РёРЅС‚РµСЂС„РµР№СЃР°.
 
-If you discover a security vulnerability within our codebase, please follow our [responsible disclosure guidelines](https://modrinth.com/legal/security).
+Р’РЅСѓС‚СЂРµРЅРЅРёРµ РёРјРµРЅР° РїР°РєРµС‚РѕРІ `@modrinth/*` РїРѕРєР° СЃРѕС…СЂР°РЅРµРЅС‹: РѕС‚ РЅРёС… Р·Р°РІРёСЃСЏС‚
+turbo-С„РёР»СЊС‚СЂС‹ Рё workspace-СЃСЃС‹Р»РєРё, РёС… РїРµСЂРµРёРјРµРЅРѕРІР°РЅРёРµ вЂ” РѕС‚РґРµР»СЊРЅР°СЏ Р·Р°РґР°С‡Р°.
 
-## Support
+## Р‘Р»Р°РіРѕРґР°СЂРЅРѕСЃС‚СЊ
 
-If you need help with the Modrinth web interface or app, please visit our [support page](https://support.modrinth.com). For general inquiries, you can also join our [Discord server](https://discord.modrinth.com).
+РџСЂРѕРµРєС‚ СЃРѕР·РґР°РЅ РЅР° РѕСЃРЅРѕРІРµ Modrinth App вЂ” В© Rinth, Inc., Р»РёС†РµРЅР·РёСЏ GPL-3.0.
+РЎРїР°СЃРёР±Рѕ Р°РІС‚РѕСЂР°Рј Рё РІСЃРµРјСѓ СЃРѕРѕР±С‰РµСЃС‚РІСѓ Modrinth.
 
-## License
-
-All packages in this repository are licensed under their respective licenses. Refer to the LICENSE file in each package for more information.
+[Minecraft](https://www.minecraft.net) вЂ” С‚РѕРІР°СЂРЅС‹Р№ Р·РЅР°Рє Mojang Studios.
+РџСЂРѕРµРєС‚ РЅРµ СЃРІСЏР·Р°РЅ СЃ Microsoft РёР»Рё Mojang.
