@@ -99,6 +99,9 @@ jobs:
 
   docker-build:
     needs: [build]
+    permissions:
+      contents: read
+      packages: write
     uses: SparkUniverse/workflows/.github/workflows/docker-build.yaml@main
     with:
       image-name: frontend
