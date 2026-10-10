@@ -40,6 +40,10 @@ jobs:
         shell: bash
         run: pnpm install --frozen-lockfile
 
+      - name: Configure production app environment
+        shell: bash
+        run: cp packages/app-lib/.env.prod packages/app-lib/.env
+
       - name: Generate i18n coverage artifact
         shell: bash
         run: node --experimental-strip-types scripts/coverage-i18n.ts --write packages/ui/src/layouts/wrapped/settings/language-settings/language-settings-coverage.generated.ts --quiet
