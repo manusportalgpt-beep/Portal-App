@@ -66,6 +66,6 @@ jobs:
           name: Portal-App-Windows-x64
           if-no-files-found: error
           path: |
-            apps/app/target/x86_64-pc-windows-msvc/release/bundle/nsis/*-setup.exe
-            apps/app/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.nsis.zip
+            target/x86_64-pc-windows-msvc/release/bundle/nsis/*-setup.exe
+            target/x86_64-pc-windows-msvc/release/bundle/nsis/*.nsis.zip
           retention-days: 7
