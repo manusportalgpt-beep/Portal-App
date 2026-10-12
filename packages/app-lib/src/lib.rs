@@ -16,6 +16,7 @@ mod event;
 pub mod install;
 mod launcher;
 mod logger;
+mod minecraft_mirror;
 mod state;
 
 pub use api::*;

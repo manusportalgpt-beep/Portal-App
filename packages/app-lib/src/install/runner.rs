@@ -1058,6 +1058,9 @@ async fn run_request_inner(
                 },
             )
             .await?;
+            if loader == ModLoader::Bedrock {
+                return Ok(Some(instance_id));
+            }
             let context =
                 crate::state::instances::commands::get_instance_launch_context(
                     &instance_id,

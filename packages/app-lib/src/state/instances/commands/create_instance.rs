@@ -44,7 +44,9 @@ pub(crate) async fn create_instance(
             &io::canonicalize(&full_path)?.display()
         );
 
-        let loader_version = if input.loader != ModLoader::Vanilla {
+        let loader_version = if input.loader != ModLoader::Vanilla
+            && input.loader != ModLoader::Bedrock
+        {
             get_loader_version_from_profile(
                 &input.game_version,
                 input.loader,

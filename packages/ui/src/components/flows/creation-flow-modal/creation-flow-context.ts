@@ -387,6 +387,7 @@ export function createCreationFlowContext(
 		() =>
 			setupType.value === 'vanilla' ||
 			selectedLoader.value === 'vanilla' ||
+			selectedLoader.value === 'bedrock' ||
 			projectInstall.value !== null,
 	)
 
@@ -447,7 +448,7 @@ export function createCreationFlowContext(
 	}
 
 	async function fetchLoaderMetadata(loader?: string | null) {
-		if (!loader || loader === 'vanilla') return
+		if (!loader || loader === 'vanilla' || loader === 'bedrock') return
 		if (loader === 'paper') {
 			await fetchPaperSupportedVersions()
 			return

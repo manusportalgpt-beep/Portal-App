@@ -6,7 +6,7 @@ use crate::install::{
 };
 use crate::state::JavaVersion;
 use crate::util::fetch::{
-    FetchProgressFn, fetch_advanced, fetch_advanced_with_progress, fetch_json,
+    FetchProgressFn, fetch_file_mirrors, fetch_json,
 };
 use dashmap::DashMap;
 use reqwest::Method;
@@ -236,14 +236,18 @@ async fn auto_install_java_inner(
                 })
             };
 
-            fetch_advanced_with_progress(
-                Method::GET,
-                &download.download_url,
+            // CDN connections can be reset while reading this large archive.
+            // Reuse the same URL as mirrors so each attempt starts with a
+            // fresh temporary file and a fresh HTTP response.
+            let mirrors = [
+                download.download_url.as_str(),
+                download.download_url.as_str(),
+                download.download_url.as_str(),
+            ];
+            fetch_file_mirrors(
+                &mirrors,
                 None,
                 None,
-                None,
-                None,
-                loading_bar.as_ref().map(|loading_bar| (loading_bar, 80.0)),
                 None,
                 &state.fetch_semaphore,
                 &state.pool,
@@ -251,17 +255,19 @@ async fn auto_install_java_inner(
             )
             .await?
         } else {
-            fetch_advanced(
-                Method::GET,
-                &download.download_url,
+            let mirrors = [
+                download.download_url.as_str(),
+                download.download_url.as_str(),
+                download.download_url.as_str(),
+            ];
+            fetch_file_mirrors(
+                &mirrors,
                 None,
                 None,
-                None,
-                None,
-                loading_bar.as_ref().map(|loading_bar| (loading_bar, 80.0)),
                 None,
                 &state.fetch_semaphore,
                 &state.pool,
+                None,
             )
             .await?
         };

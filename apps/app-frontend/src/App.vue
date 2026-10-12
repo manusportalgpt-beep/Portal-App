@@ -2162,6 +2162,7 @@ provideAppUpdateDownloadProgress(appUpdateDownload)
 			ref="installationModal"
 			type="instance"
 			show-snapshot-toggle
+			:available-loaders="['fabric', 'neoforge', 'forge', 'quilt', 'bedrock']"
 			:fetch-existing-instance-names="fetchExistingInstanceNames"
 			:search-projects="searchProjects"
 			:prepare-project-install="prepareCreationProjectInstall"

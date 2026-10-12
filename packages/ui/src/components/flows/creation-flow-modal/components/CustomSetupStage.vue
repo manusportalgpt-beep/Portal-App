@@ -623,6 +623,11 @@ watch(
 	() => selectedLoader.value,
 	async (loader) => {
 		if (ctx.projectInstall.value) return
+		if (loader === 'bedrock') {
+			selectedGameVersion.value = 'bedrock'
+			selectedLoaderVersion.value = null
+			return
+		}
 		await fetchLoaderMetadata(loader)
 	},
 	{ immediate: true },
