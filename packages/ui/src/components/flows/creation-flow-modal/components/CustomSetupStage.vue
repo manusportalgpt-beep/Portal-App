@@ -147,7 +147,7 @@
 		</div>
 
 		<!-- Loader version -->
-		<template v-if="!hideLoaderVersion">
+		<template v-if="!hideLoaderVersion && selectedLoader !== 'bedrock'">
 			<Collapsible :collapsed="!selectedLoader || !selectedGameVersion" overflow-visible>
 				<div class="flex flex-col gap-2">
 					<span class="font-semibold text-contrast">{{
@@ -463,6 +463,10 @@ const gameVersionOptions = computed<ComboboxOption<string>[]>(() => {
 		: tags.gameVersions.value.filter((v) => v.version_type === 'release')
 
 	// For loaders with per-version data, only show game versions that have builds
+	if (selectedLoader.value === 'bedrock') {
+		return versions.map((v) => ({ value: v.version, label: v.version }))
+	}
+
 	if (selectedLoader.value && selectedLoader.value !== 'vanilla') {
 		if (selectedLoader.value === 'paper') {
 			if (!ctx.paperSupportedVersions.value) return []
@@ -644,7 +648,7 @@ watch(
 		selectedLoaderVersion.value = null
 
 		if (ctx.projectInstall.value) return
-		if (!loader || !gameVersion || loader === 'vanilla') return
+		if (!loader || !gameVersion || loader === 'vanilla' || loader === 'bedrock') return
 
 		loaderVersionsLoading.value = true
 

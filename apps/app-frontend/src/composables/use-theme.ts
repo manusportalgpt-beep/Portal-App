@@ -3,14 +3,29 @@ import { computed, reactive, ref, watch } from 'vue'
 
 export const THEME_OPTIONS = ['dark', 'light', 'oled', 'retro', 'system'] as const
 export const DARK_THEMES = ['dark', 'oled', 'retro'] as const
+export const ACCENT_MODES = ['solid', 'rainbow', 'duotone'] as const
 
 export type ColorTheme = (typeof THEME_OPTIONS)[number]
 export type DarkTheme = (typeof DARK_THEMES)[number]
+export type AccentMode = (typeof ACCENT_MODES)[number]
 type Theme = Exclude<ColorTheme, 'system'>
 type NativeTheme = 'light' | 'dark'
 
 const PREFERRED_THEME_KEY = 'modrinth-theme'
 const PREFERRED_DARK_THEME_KEY = 'modrinth-preferred-dark-theme'
+const ACCENT_SETTINGS_KEY = 'portal-app-accent-settings'
+
+export type AccentSettings = {
+	mode: AccentMode
+	primary: string
+	secondary: string
+}
+
+const DEFAULT_ACCENT: AccentSettings = {
+	mode: 'solid',
+	primary: '#e5484d',
+	secondary: '#ff8a65',
+}
 
 export function isDarkTheme(theme: string): theme is DarkTheme {
 	return (DARK_THEMES as readonly string[]).includes(theme)
@@ -48,11 +63,29 @@ function loadPreferredDarkTheme(): DarkTheme {
 	return 'dark'
 }
 
+function loadAccentSettings(): AccentSettings {
+	try {
+		const value = JSON.parse(window.localStorage.getItem(ACCENT_SETTINGS_KEY) ?? 'null')
+		if (
+			value &&
+			ACCENT_MODES.includes(value.mode) &&
+			/^#[0-9a-f]{6}$/i.test(value.primary) &&
+			/^#[0-9a-f]{6}$/i.test(value.secondary)
+		) {
+			return value
+		}
+	} catch {
+		// storage blocked, invalid, or full
+	}
+	return { ...DEFAULT_ACCENT }
+}
+
 const preferred = ref<ColorTheme>(loadPreferredTheme())
 const preview = ref<ColorTheme | null>(null)
 const preferredDark = ref<DarkTheme>(loadPreferredDarkTheme())
 const advancedRendering = ref(true)
 const syncAcrossDevices = ref(false)
+const accent = reactive<AccentSettings>(loadAccentSettings())
 const nativeThemeQuery = window.matchMedia('(prefers-color-scheme: dark)')
 const native = ref<NativeTheme>(nativeThemeQuery.matches ? 'dark' : 'light')
 const active = computed<Theme>(() => {
@@ -67,6 +100,44 @@ const active = computed<Theme>(() => {
 nativeThemeQuery.addEventListener('change', (event) => {
 	native.value = event.matches ? 'dark' : 'light'
 })
+
+function applyAccent(): void {
+	const root = document.documentElement
+	root.classList.toggle('accent-rainbow', accent.mode === 'rainbow')
+	root.classList.toggle('accent-duotone', accent.mode === 'duotone')
+	root.style.setProperty('--portal-accent-primary', accent.primary)
+	root.style.setProperty('--portal-accent-secondary', accent.secondary)
+	if (accent.mode === 'rainbow') {
+		root.style.setProperty('--color-brand', 'hsl(var(--portal-accent-hue) 78% 58%)')
+		root.style.setProperty('--color-brand-highlight', 'hsl(var(--portal-accent-hue) 78% 58% / 0.2)')
+		root.style.setProperty('--color-brand-shadow', 'hsl(var(--portal-accent-hue) 78% 58% / 0.35)')
+	} else {
+		root.style.setProperty('--color-brand', accent.primary)
+		root.style.setProperty(
+			'--color-brand-highlight',
+			accent.mode === 'duotone'
+				? `color-mix(in srgb, ${accent.primary} 55%, ${accent.secondary})`
+				: `color-mix(in srgb, ${accent.primary} 20%, transparent)`,
+		)
+		root.style.setProperty(
+			'--color-brand-shadow',
+			`color-mix(in srgb, ${accent.primary} 35%, transparent)`,
+		)
+	}
+}
+
+watch(
+	accent,
+	(value) => {
+		applyAccent()
+		try {
+			window.localStorage.setItem(ACCENT_SETTINGS_KEY, JSON.stringify(value))
+		} catch {
+			// storage blocked or full
+		}
+	},
+	{ deep: true, immediate: true },
+)
 
 watch([preferred, preview], ([selectedPreferred, selectedPreview]) => {
 	const selectedTheme = selectedPreview ?? selectedPreferred
@@ -135,6 +206,8 @@ const theme = reactive({
 	syncAcrossDevices,
 	advancedRendering,
 	options: THEME_OPTIONS,
+	accent,
+	accentModes: ACCENT_MODES,
 	applyAccountAppearance,
 })
 

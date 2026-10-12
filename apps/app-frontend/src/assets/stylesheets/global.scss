@@ -4,6 +4,23 @@
 
 @import '@modrinth/ui/src/styles/tailwind-utilities.css';
 
+@property --portal-accent-hue {
+	syntax: '<number>';
+	inherits: true;
+	initial-value: 0;
+}
+
+html.accent-rainbow {
+	--portal-accent-hue: 0;
+	animation: portal-accent-rainbow 8s linear infinite;
+}
+
+@keyframes portal-accent-rainbow {
+	to {
+		--portal-accent-hue: 360;
+	}
+}
+
 @font-face {
 	font-family: 'bundled-minecraft-font-mrapp';
 	font-style: normal;

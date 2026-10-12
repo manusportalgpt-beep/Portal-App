@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import {
 	AppearanceSettingsLayout,
+	ColorPicker,
 	injectAuth,
 	injectUserPreferences,
 	provideAppearanceSettings,
@@ -84,6 +85,10 @@ function setTheme(value: ColorTheme): void {
 	current.value.theme = value
 }
 
+function setAccentMode(mode: (typeof theme.accentModes)[number]): void {
+	theme.accent.mode = mode
+}
+
 function setSyncAcrossDevices(enabled: boolean): void {
 	current.value.syncAcrossDevices = enabled
 }
@@ -158,5 +163,53 @@ provideAppearanceSettings({
 </script>
 
 <template>
-	<AppearanceSettingsLayout />
+	<div>
+		<AppearanceSettingsLayout />
+		<section class="mt-8 border-0 border-t border-solid border-divider pt-6">
+			<div class="rounded-xl border border-solid border-divider bg-surface-2 p-4">
+				<h2 class="m-0 text-xl font-semibold text-contrast">Accent color</h2>
+				<p class="mt-1 text-secondary">
+					Choose a ready color, your own color, a moving rainbow, or a two-color palette.
+				</p>
+				<div class="mt-4 flex flex-wrap gap-2">
+					<button
+						v-for="mode in theme.accentModes"
+						:key="mode"
+						type="button"
+						class="rounded-lg border border-solid px-3 py-2 text-sm font-semibold transition-colors"
+						:class="
+							theme.accent.mode === mode
+								? 'border-brand bg-brand-highlight text-brand'
+								: 'border-divider bg-surface-3 text-secondary hover:text-primary'
+						"
+						@click="setAccentMode(mode)"
+					>
+						{{ mode === 'solid' ? 'Single color' : mode === 'rainbow' ? 'Rainbow' : 'Two colors' }}
+					</button>
+				</div>
+				<div class="mt-4 flex flex-wrap items-center gap-4">
+					<label class="flex items-center gap-2 text-sm text-secondary">
+						<span>{{ theme.accent.mode === 'duotone' ? 'First color' : 'Color' }}</span>
+						<ColorPicker v-model="theme.accent.primary" label="Choose accent color" />
+					</label>
+					<label
+						v-if="theme.accent.mode === 'duotone'"
+						class="flex items-center gap-2 text-sm text-secondary"
+					>
+						<span>Second color</span>
+						<ColorPicker v-model="theme.accent.secondary" label="Choose second accent color" />
+					</label>
+				</div>
+				<div
+					class="mt-4 h-3 rounded-full"
+					:style="{
+						background:
+							theme.accent.mode === 'rainbow'
+								? 'linear-gradient(90deg, #f44, #fd4, #4d7, #4df, #84f, #f4d, #f44)'
+								: `linear-gradient(90deg, ${theme.accent.primary}, ${theme.accent.secondary})`,
+					}"
+				/>
+			</div>
+		</section>
+	</div>
 </template>
