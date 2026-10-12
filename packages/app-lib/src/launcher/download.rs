@@ -152,6 +152,10 @@ async fn fetch_minecraft_file(
     context: InstallErrorContext,
 ) -> crate::Result<DownloadedFile> {
     let mut context = context;
+    let mirror_url = crate::util::minecraft_mirror::bmclapi_url(url);
+    if let Some(mirror_url) = &mirror_url {
+        context.urls.push(mirror_url.clone());
+    }
     context.urls.push(url.to_string());
     context.expected_hash = sha1.map(str::to_string);
     context.expected_size = expected_size;
@@ -160,8 +164,9 @@ async fn fetch_minecraft_file(
     }
 
     let Some(progress) = progress else {
-        return fetch_file(
-            url,
+        let download_url = mirror_url.as_deref().unwrap_or(url);
+        match fetch_file(
+            download_url,
             sha1,
             None,
             None,
@@ -169,7 +174,26 @@ async fn fetch_minecraft_file(
             &st.pool,
             None,
         )
-        .await;
+        .await
+        {
+            Ok(file) => return Ok(file),
+            Err(mirror_error) if download_url != url => {
+                tracing::warn!(
+                    "BMCLAPI download failed for {url}: {mirror_error:#?}; retrying the original source"
+                );
+                return fetch_file(
+                    url,
+                    sha1,
+                    None,
+                    None,
+                    &st.fetch_semaphore,
+                    &st.pool,
+                    None,
+                )
+                .await;
+            }
+            Err(error) => return Err(error),
+        }
     };
 
     let last_downloaded = Arc::new(AtomicU64::new(0));
@@ -187,8 +211,9 @@ async fn fetch_minecraft_file(
         }
     };
 
-    let bytes = match fetch_file(
-        url,
+    let download_url = mirror_url.as_deref().unwrap_or(url);
+    let mut result = fetch_file(
+        download_url,
         sha1,
         None,
         None,
@@ -196,8 +221,24 @@ async fn fetch_minecraft_file(
         &st.pool,
         Some(&mut progress_fn as &mut FetchProgressFn<'_>),
     )
-    .await
-    {
+    .await;
+    if result.is_err() && download_url != url {
+        tracing::warn!(
+            "BMCLAPI download failed for {url}; retrying the original source"
+        );
+        last_downloaded.store(0, Ordering::Relaxed);
+        result = fetch_file(
+            url,
+            sha1,
+            None,
+            None,
+            &st.fetch_semaphore,
+            &st.pool,
+            Some(&mut progress_fn as &mut FetchProgressFn<'_>),
+        )
+        .await;
+    }
+    let bytes = match result {
         Ok(bytes) => bytes,
         Err(error) => {
             progress.persist_failure_context(context).await;
@@ -985,17 +1026,19 @@ pub async fn download_libraries(
                     // failed download here is not a fatal condition.
                     //
                     // See DEV-479.
-                    match fetch_file(
+                    match fetch_minecraft_file(
+                        st,
                         &url,
                         None,
                         None,
                         None,
-                        &st.fetch_semaphore,
-                        &st.pool,
-						None,
+                        InstallErrorContext::new("download Minecraft library")
+                            .minecraft_version(version.to_string())
+                            .file_path(library.name.clone())
+                            .target_path(path.display().to_string())
+                            .build(),
                     )
-                    .await
-                    {
+                    .await {
                         Ok(bytes) => {
                             bytes.copy_to(&path, &st.io_semaphore).await?;
 
