@@ -6,7 +6,7 @@ use crate::install::{
 };
 use crate::state::JavaVersion;
 use crate::util::fetch::{
-    FetchProgressFn, fetch_file_mirrors, fetch_json,
+    FetchProgressFn, fetch_advanced_with_progress, fetch_json,
 };
 use dashmap::DashMap;
 use reqwest::Method;
@@ -266,37 +266,63 @@ async fn auto_install_java_inner(
             // CDN connections can be reset while reading this large archive.
             // Reuse the same URL as mirrors so each attempt starts with a
             // fresh temporary file and a fresh HTTP response.
-            let mirrors = [
-                download.download_url.as_str(),
-                download.download_url.as_str(),
-                download.download_url.as_str(),
-            ];
-            fetch_file_mirrors(
-                &mirrors,
-                None,
-                None,
-                None,
-                &state.fetch_semaphore,
-                &state.pool,
-                Some(&mut progress as &mut FetchProgressFn<'_>),
-            )
-            .await?
+            let mut result = None;
+            for attempt in 0..3 {
+                match fetch_advanced_with_progress(
+                    Method::GET,
+                    &download.download_url,
+                    None,
+                    None,
+                    None,
+                    None,
+                    loading_bar.as_ref().map(|loading_bar| (loading_bar, 80.0)),
+                    None,
+                    &state.fetch_semaphore,
+                    &state.pool,
+                    Some(&mut progress as &mut FetchProgressFn<'_>),
+                )
+                .await
+                {
+                    Ok(file) => {
+                        result = Some(file);
+                        break;
+                    }
+                    Err(error) if attempt < 2 => {
+                        tracing::warn!("Temurin download attempt {} failed: {error:#?}", attempt + 1);
+                    }
+                    Err(error) => return Err(error),
+                }
+            }
+            result.expect("Temurin download retry loop must produce a result")
         } else {
-            let mirrors = [
-                download.download_url.as_str(),
-                download.download_url.as_str(),
-                download.download_url.as_str(),
-            ];
-            fetch_file_mirrors(
-                &mirrors,
-                None,
-                None,
-                None,
-                &state.fetch_semaphore,
-                &state.pool,
-                None,
-            )
-            .await?
+            let mut result = None;
+            for attempt in 0..3 {
+                match fetch_advanced_with_progress(
+                    Method::GET,
+                    &download.download_url,
+                    None,
+                    None,
+                    None,
+                    None,
+                    loading_bar.as_ref().map(|loading_bar| (loading_bar, 80.0)),
+                    None,
+                    &state.fetch_semaphore,
+                    &state.pool,
+                    None,
+                )
+                .await
+                {
+                    Ok(file) => {
+                        result = Some(file);
+                        break;
+                    }
+                    Err(error) if attempt < 2 => {
+                        tracing::warn!("Temurin download attempt {} failed: {error:#?}", attempt + 1);
+                    }
+                    Err(error) => return Err(error),
+                }
+            }
+            result.expect("Temurin download retry loop must produce a result")
         };
 
         let path = state.directories.java_versions_dir();

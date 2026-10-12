@@ -207,6 +207,13 @@ fn metadata_order(loader: Option<ModLoader>) -> [ModMetadataKind; 5] {
             ModMetadataKind::Fabric,
             ModMetadataKind::Quilt,
         ],
+        Some(ModLoader::Bedrock) => [
+            ModMetadataKind::Fabric,
+            ModMetadataKind::Quilt,
+            ModMetadataKind::NeoForge,
+            ModMetadataKind::Forge,
+            ModMetadataKind::LegacyForge,
+        ],
         Some(ModLoader::Vanilla) | None => [
             ModMetadataKind::Fabric,
             ModMetadataKind::Quilt,
