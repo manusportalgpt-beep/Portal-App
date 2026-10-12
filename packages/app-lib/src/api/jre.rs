@@ -140,6 +140,22 @@ async fn auto_install_java_inner(
         pub name: PathBuf,
     }
 
+    #[derive(Deserialize)]
+    struct AdoptiumAsset {
+        binary: AdoptiumBinary,
+    }
+
+    #[derive(Deserialize)]
+    struct AdoptiumBinary {
+        package: AdoptiumPackage,
+    }
+
+    #[derive(Deserialize)]
+    struct AdoptiumPackage {
+        link: String,
+        name: PathBuf,
+    }
+
     if let Some(loading_bar) = &loading_bar {
         emit_loading(loading_bar, 0.0, Some("Fetching java version"))?;
     }
@@ -150,10 +166,14 @@ async fn auto_install_java_inner(
         Some(java_step_progress(1)),
     )
     .await?;
+    let architecture = match std::env::consts::ARCH {
+        "x86_64" => "x64",
+        "aarch64" => "aarch64",
+        "x86" => "x86",
+        other => other,
+    };
     let metadata_url = format!(
-        "https://api.azul.com/metadata/v1/zulu/packages?arch={}&java_version={}&os={}&archive_type=zip&javafx_bundled=false&java_package_type=jre&page_size=1",
-        std::env::consts::ARCH,
-        java_version,
+        "https://api.adoptium.net/v3/assets/latest/{java_version}/hotspot?architecture={architecture}&image_type=jdk&jvm_impl=hotspot&os={}&vendor=eclipse",
         std::env::consts::OS
     );
     if let Some(reporter) = &reporter {
@@ -168,7 +188,7 @@ async fn auto_install_java_inner(
             )
             .await?;
     }
-    let packages = fetch_json::<Vec<Package>>(
+    let assets = fetch_json::<Vec<AdoptiumAsset>>(
         Method::GET,
         &metadata_url,
         None,
@@ -178,6 +198,13 @@ async fn auto_install_java_inner(
         &state.pool,
     )
     .await?;
+    let packages: Vec<Package> = assets
+        .into_iter()
+        .map(|asset| Package {
+            download_url: asset.binary.package.link,
+            name: asset.binary.package.name,
+        })
+        .collect();
     if let Some(loading_bar) = &loading_bar {
         emit_loading(loading_bar, 10.0, Some("Downloading java version"))?;
     }
@@ -295,10 +322,16 @@ async fn auto_install_java_inner(
                 ))
             })?;
 
+        // Temurin's archive filename and its top-level directory differ
+        // (for example, OpenJDK...zip extracts into jdk-21.0.12.1+1).
+        let archive_root = archive
+            .file_names()
+            .next()
+            .and_then(|file| file.split('/').next())
+            .map(str::to_owned);
+
         // removes the old installation of java
-        if let Some(file) = archive.file_names().next()
-            && let Some(dir) = file.split('/').next()
-        {
+        if let Some(dir) = archive_root.as_deref() {
             let path = path.join(dir);
 
             if path.exists() {
@@ -338,14 +371,14 @@ async fn auto_install_java_inner(
         if let Some(loading_bar) = &loading_bar {
             emit_loading(loading_bar, 10.0, Some("Done extracting java"))?;
         }
-        let mut base_path = path.join(
+        let mut base_path = path.join(archive_root.unwrap_or_else(|| {
             download
                 .name
                 .file_stem()
                 .unwrap_or_default()
                 .to_string_lossy()
-                .to_string(),
-        );
+                .to_string()
+        }));
 
         #[cfg(target_os = "macos")]
         {
